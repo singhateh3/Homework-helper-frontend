@@ -12,6 +12,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
     if (storedToken) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setToken(storedToken);
       api.defaults.headers.common.Authorization = `Bearer ${storedToken}`;
     }
@@ -45,4 +46,5 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

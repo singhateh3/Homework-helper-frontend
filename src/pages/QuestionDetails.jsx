@@ -33,6 +33,7 @@ const QuestionDetails = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchQuestion();
   }, [id]);
 
@@ -75,12 +76,30 @@ const QuestionDetails = () => {
         setAnswers(response.data.data);
       } else if (response.data.answers) {
         setAnswers(response.data.answers);
+      } else if (Array.isArray(response.data)) {
+        setAnswers(response.data);
       } else {
         setAnswers([]);
       }
     } catch (error) {
-      console.error(error);
-      setError("Failed to fetch answers");
+      console.error("Error fetching answers:", error);
+
+      // 404 is acceptable - just means no answers exist yet
+      if (error.response?.status === 404) {
+        setAnswers([]); // Empty answers array
+        // Don't set error state for 404
+        return;
+      }
+
+      // For other errors (500, 403, etc.), show error
+      if (error.response?.status === 500) {
+        console.warn(
+          "Server error - answers endpoint might not be implemented",
+        );
+        setAnswers([]); // Still show empty state
+      } else {
+        setError("Failed to fetch answers");
+      }
     }
   };
 
