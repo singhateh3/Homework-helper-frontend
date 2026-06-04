@@ -9,6 +9,7 @@ import QuestionDetails from "../pages/QuestionDetails.jsx";
 import ProtectedRoute from "../components/ProtectedRoute";
 
 const router = createBrowserRouter([
+  // Public routes (no authentication needed)
   {
     path: "/login",
     element: <Login />,
@@ -17,7 +18,7 @@ const router = createBrowserRouter([
     path: "/register",
     element: <Register />,
   },
-  // Protect the home page
+  // Protected routes (require authentication)
   {
     path: "/",
     element: (
@@ -50,6 +51,7 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
   },
+  // 404 route
   {
     path: "*",
     element: <NotFoundPage />,

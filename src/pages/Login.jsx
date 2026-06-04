@@ -25,7 +25,6 @@ const Login = () => {
       ...formData,
       [e.target.name]: e.target.value,
     });
-    // Clear error when user starts typing
     if (error) setError("");
   };
 
@@ -36,36 +35,20 @@ const Login = () => {
 
     try {
       const response = await api.post("/login", formData);
-
-      // Assuming the token is in response.data.token
-      // Adjust based on your Laravel API response structure
       const token = response.data.token || response.data.access_token;
 
       if (token) {
         login(token);
-        navigate("/"); // Redirect to home page after successful login
+        navigate("/");
       } else {
         setError("Invalid response from server");
       }
     } catch (error) {
       console.error(error);
-      // Handle different error scenarios
-      if (error.response) {
-        // Server responded with error status
-        if (error.response.status === 401) {
-          setError("Invalid email or password");
-        } else if (error.response.status === 422) {
-          setError("Please check your email and password");
-        } else {
-          setError(
-            error.response.data?.message || "Login failed. Please try again.",
-          );
-        }
-      } else if (error.request) {
-        // Request was made but no response
-        setError("Cannot connect to server. Please try again later.");
+      if (error.response?.status === 401) {
+        setError("Invalid email or password");
       } else {
-        setError("An error occurred. Please try again.");
+        setError("Login failed. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -77,7 +60,6 @@ const Login = () => {
       <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow">
         <h1 className="text-3xl font-bold mb-6 text-center">Welcome Back</h1>
 
-        {/* Error Message */}
         {error && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
             {error}
@@ -85,7 +67,6 @@ const Login = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* EMAIL */}
           <div>
             <label className="block mb-2 font-medium">Email</label>
             <input
@@ -99,7 +80,6 @@ const Login = () => {
             />
           </div>
 
-          {/* PASSWORD */}
           <div>
             <label className="block mb-2 font-medium">Password</label>
             <input
@@ -113,17 +93,15 @@ const Login = () => {
             />
           </div>
 
-          {/* BUTTON */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
           >
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>
 
-        {/* Optional: Link to Register */}
         <p className="mt-4 text-center text-gray-600">
           Don't have an account?{" "}
           <a href="/register" className="text-blue-600 hover:underline">

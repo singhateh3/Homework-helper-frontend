@@ -15,7 +15,7 @@ const Register = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already logged in
+  // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
       navigate("/", { replace: true });
@@ -27,7 +27,6 @@ const Register = () => {
       ...formData,
       [e.target.name]: e.target.value,
     });
-    // Clear error when user starts typing
     if (error) setError("");
   };
 
@@ -36,7 +35,6 @@ const Register = () => {
     setLoading(true);
     setError("");
 
-    // Validate passwords match
     if (formData.password !== formData.password_confirmation) {
       setError("Passwords do not match");
       setLoading(false);
@@ -45,49 +43,26 @@ const Register = () => {
 
     try {
       const response = await api.post("/register", formData);
-      console.log(response.data);
-
-      // Assuming your API returns a token after registration
-      // Adjust based on your Laravel API response structure
       const token = response.data.token || response.data.access_token;
 
       if (token) {
-        // Log the user in automatically after registration
         login(token);
-        navigate("/"); // Redirect to home page
+        navigate("/");
       } else {
-        // If no token, just redirect to login
         navigate("/login");
       }
     } catch (error) {
       console.error(error);
-
-      // Handle different error scenarios
-      if (error.response) {
-        // Server responded with error
-        if (error.response.status === 422) {
-          // Validation errors
-          const errors = error.response.data.errors;
-          if (errors) {
-            // Get first error message
-            const firstError = Object.values(errors)[0];
-            setError(Array.isArray(firstError) ? firstError[0] : firstError);
-          } else {
-            setError(error.response.data.message || "Validation failed");
-          }
-        } else if (error.response.status === 409) {
-          setError("Email already exists");
+      if (error.response?.status === 422) {
+        const errors = error.response.data.errors;
+        if (errors) {
+          const firstError = Object.values(errors)[0];
+          setError(Array.isArray(firstError) ? firstError[0] : firstError);
         } else {
-          setError(
-            error.response.data?.message ||
-              "Registration failed. Please try again.",
-          );
+          setError("Validation failed");
         }
-      } else if (error.request) {
-        // Request made but no response
-        setError("Cannot connect to server. Please check your connection.");
       } else {
-        setError("An error occurred. Please try again.");
+        setError("Registration failed. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -99,7 +74,6 @@ const Register = () => {
       <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow">
         <h1 className="text-3xl font-bold mb-6 text-center">Create Account</h1>
 
-        {/* Error Message */}
         {error && (
           <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
             {error}
@@ -107,7 +81,6 @@ const Register = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* NAME */}
           <div>
             <label className="block mb-2 font-medium">Name</label>
             <input
@@ -121,7 +94,6 @@ const Register = () => {
             />
           </div>
 
-          {/* EMAIL */}
           <div>
             <label className="block mb-2 font-medium">Email</label>
             <input
@@ -135,7 +107,6 @@ const Register = () => {
             />
           </div>
 
-          {/* PASSWORD */}
           <div>
             <label className="block mb-2 font-medium">Password</label>
             <input
@@ -149,7 +120,6 @@ const Register = () => {
             />
           </div>
 
-          {/* CONFIRM PASSWORD */}
           <div>
             <label className="block mb-2 font-medium">Confirm Password</label>
             <input
@@ -163,17 +133,15 @@ const Register = () => {
             />
           </div>
 
-          {/* BUTTON */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
           >
             {loading ? "Creating Account..." : "Register"}
           </button>
         </form>
 
-        {/* Link to Login */}
         <p className="mt-4 text-center text-gray-600">
           Already have an account?{" "}
           <a href="/login" className="text-blue-600 hover:underline">
