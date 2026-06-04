@@ -8,9 +8,12 @@ function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState({
-    totalQuestions: 0,
-    totalAnswers: 0,
-    totalUsers: 0,
+    total_questions: 0,
+    total_answers: 0,
+    total_users: 0,
+    today_questions: 0,
+    today_answers: 0,
+    most_active_user: null,
   });
 
   const fetchQuestions = async () => {
@@ -32,8 +35,10 @@ function Home() {
   const fetchStats = async () => {
     try {
       const response = await api.get("/stats");
-      if (response.data) {
-        setStats(response.data);
+      console.log("Stats response:", response.data);
+
+      if (response.data.success && response.data.data) {
+        setStats(response.data.data);
       }
     } catch (error) {
       console.error("Failed to fetch stats:", error);
@@ -62,28 +67,38 @@ function Home() {
             worldwide
           </p>
 
-          {/* Stats Bar - Responsive Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-3xl mx-auto mb-8 sm:mb-12 px-4">
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4">
+          {/* Stats Bar - Real data from backend */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-4xl mx-auto mb-8 sm:mb-12 px-4">
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4 transform hover:scale-105 transition">
               <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">❓</div>
               <div className="text-xl sm:text-2xl font-bold">
-                {stats.totalQuestions || 0}
+                {stats.total_questions}
               </div>
               <div className="text-xs sm:text-sm opacity-75">
                 Questions Asked
               </div>
+              {stats.today_questions > 0 && (
+                <div className="text-xs opacity-75 mt-1">
+                  +{stats.today_questions} today
+                </div>
+              )}
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4">
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4 transform hover:scale-105 transition">
               <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">💬</div>
               <div className="text-xl sm:text-2xl font-bold">
-                {stats.totalAnswers || 0}
+                {stats.total_answers}
               </div>
               <div className="text-xs sm:text-sm opacity-75">Answers Given</div>
+              {stats.today_answers > 0 && (
+                <div className="text-xs opacity-75 mt-1">
+                  +{stats.today_answers} today
+                </div>
+              )}
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4">
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4 transform hover:scale-105 transition">
               <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">👥</div>
               <div className="text-xl sm:text-2xl font-bold">
-                {stats.totalUsers || 0}
+                {stats.total_users}
               </div>
               <div className="text-xs sm:text-sm opacity-75">
                 Community Members
@@ -91,7 +106,19 @@ function Home() {
             </div>
           </div>
 
-          {/* Buttons - Responsive Stack */}
+          {/* Most Active User (if exists) */}
+          {stats.most_active_user && (
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 max-w-sm mx-auto mb-8">
+              <div className="text-xs opacity-75 mb-1">
+                🏆 Most Active Member
+              </div>
+              <div className="font-semibold">{stats.most_active_user.name}</div>
+              <div className="text-xs opacity-75">
+                {stats.most_active_user.total_contributions} contributions
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 px-4">
             <Link
               to="/ask-question"
@@ -232,7 +259,6 @@ function Home() {
         </div>
       </section>
 
-      {/* Add responsive CSS animations */}
       <style jsx>{`
         @keyframes fade-in {
           from {
@@ -244,25 +270,8 @@ function Home() {
             transform: translateY(0);
           }
         }
-        @keyframes fade-in-up {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
         .animate-fade-in {
           animation: fade-in 0.6s ease-out;
-        }
-
-        /* Responsive font adjustments */
-        @media (max-width: 640px) {
-          .animate-fade-in {
-            animation: fade-in-up 0.5s ease-out;
-          }
         }
       `}</style>
     </div>
