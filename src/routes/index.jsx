@@ -6,35 +6,56 @@ import NotFoundPage from "../pages/NotFoundPage.jsx";
 import CreateQuestion from "../pages/CreateQuestion.jsx";
 import AllQuestions from "../pages/AllQuestions.jsx";
 import QuestionDetails from "../pages/QuestionDetails.jsx";
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const router = createBrowserRouter([
-  {
-    path: "/",
-    element: <Home />,
-  },
-  {
-    path: "*",
-    element: <NotFoundPage />,
-  },
-  {
-    path: "/register",
-    element: <Register />,
-  },
+  // Public routes (no authentication needed)
   {
     path: "/login",
     element: <Login />,
   },
   {
+    path: "/register",
+    element: <Register />,
+  },
+  // Protected routes (require authentication)
+  {
+    path: "/",
+    element: (
+      <ProtectedRoute>
+        <Home />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: "/ask-question",
-    element: <CreateQuestion />,
+    element: (
+      <ProtectedRoute>
+        <CreateQuestion />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/all-questions",
-    element: <AllQuestions />,
+    element: (
+      <ProtectedRoute>
+        <AllQuestions />
+      </ProtectedRoute>
+    ),
   },
   {
     path: "/questions/:id",
-    element: <QuestionDetails />,
+    element: (
+      <ProtectedRoute>
+        <QuestionDetails />
+      </ProtectedRoute>
+    ),
+  },
+  // 404 route
+  {
+    path: "*",
+    element: <NotFoundPage />,
   },
 ]);
+
 export default router;

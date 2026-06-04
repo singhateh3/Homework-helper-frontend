@@ -1,36 +1,74 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import api from "../services/api";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
     });
+    // Clear error when user starts typing
+    if (error) setError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
 
-    console.log(formData);
-
-    // later:
     try {
       const response = await api.post("/login", formData);
-      login(response.data.token); // Assuming the token is in response.data.token
-      console.log(response.data);
-      navigate("/"); // Redirect to home page after successful login
+
+      // Assuming the token is in response.data.token
+      // Adjust based on your Laravel API response structure
+      const token = response.data.token || response.data.access_token;
+
+      if (token) {
+        login(token);
+        navigate("/"); // Redirect to home page after successful login
+      } else {
+        setError("Invalid response from server");
+      }
     } catch (error) {
       console.error(error);
+      // Handle different error scenarios
+      if (error.response) {
+        // Server responded with error status
+        if (error.response.status === 401) {
+          setError("Invalid email or password");
+        } else if (error.response.status === 422) {
+          setError("Please check your email and password");
+        } else {
+          setError(
+            error.response.data?.message || "Login failed. Please try again.",
+          );
+        }
+      } else if (error.request) {
+        // Request was made but no response
+        setError("Cannot connect to server. Please try again later.");
+      } else {
+        setError("An error occurred. Please try again.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -39,17 +77,24 @@ const Login = () => {
       <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow">
         <h1 className="text-3xl font-bold mb-6 text-center">Welcome Back</h1>
 
+        {/* Error Message */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+            {error}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* EMAIL */}
           <div>
             <label className="block mb-2 font-medium">Email</label>
-
             <input
               type="email"
               name="email"
               value={formData.email}
               onChange={handleChange}
               placeholder="Enter your email"
+              required
               className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -57,13 +102,13 @@ const Login = () => {
           {/* PASSWORD */}
           <div>
             <label className="block mb-2 font-medium">Password</label>
-
             <input
               type="password"
               name="password"
               value={formData.password}
               onChange={handleChange}
               placeholder="Enter password"
+              required
               className="w-full border border-gray-300 rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -71,11 +116,20 @@ const Login = () => {
           {/* BUTTON */}
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Login
+            {loading ? "Logging in..." : "Login"}
           </button>
         </form>
+
+        {/* Optional: Link to Register */}
+        <p className="mt-4 text-center text-gray-600">
+          Don't have an account?{" "}
+          <a href="/register" className="text-blue-600 hover:underline">
+            Register
+          </a>
+        </p>
       </div>
     </div>
   );
