@@ -302,12 +302,6 @@ const QuestionDetails = () => {
               <p className="text-sm sm:text-base text-gray-500 mb-4">
                 Be the first to help!
               </p>
-              <button
-                onClick={() => setShowReplyForm(true)}
-                className="inline-flex items-center gap-2 bg-blue-600 text-white px-5 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold hover:bg-blue-700 transition text-sm sm:text-base"
-              >
-                ✏️ Write an Answer
-              </button>
             </div>
           ) : (
             <div className="space-y-4 sm:space-y-6">
