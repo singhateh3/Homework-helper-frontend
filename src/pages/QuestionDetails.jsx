@@ -10,9 +10,16 @@ const QuestionDetails = () => {
 
   const [question, setQuestion] = useState(null);
   const [answers, setAnswers] = useState([]);
-  const [loading, setLoading] = useState(true); // Single loading state for both
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [debugInfo, setDebugInfo] = useState({});
+
+  // Pagination state for answers
+  const [currentPage, setCurrentPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [totalAnswers, setTotalAnswers] = useState(0);
+  const [perPage, setPerPage] = useState(10);
+  const [paginationLoading, setPaginationLoading] = useState(false);
 
   // Reply state
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -20,7 +27,7 @@ const QuestionDetails = () => {
   const [submitting, setSubmitting] = useState(false);
 
   // Fetch both question and answers simultaneously
-  const fetchData = async () => {
+  const fetchData = async (page = 1) => {
     setLoading(true);
     setError(null);
 
@@ -28,7 +35,7 @@ const QuestionDetails = () => {
       // Fetch question and answers in parallel
       const [questionResponse, answersResponse] = await Promise.all([
         api.get(`/questions/${id}`),
-        api.get(`/questions/${id}/answers`),
+        api.get(`/questions/${id}/answers?page=${page}&per_page=${perPage}`),
       ]);
 
       console.log("===== QUESTION DATA =====");
@@ -48,25 +55,47 @@ const QuestionDetails = () => {
         },
       }));
 
-      // Process answers
+      // Process answers with pagination data
       console.log("===== ANSWERS API RESPONSE =====");
       console.log("Full response:", answersResponse.data);
 
       let answersData = [];
+      let paginationData = {};
+
       if (answersResponse.data.data) {
         answersData = answersResponse.data.data;
+        paginationData = answersResponse.data;
         console.log("Using response.data.data");
       } else if (answersResponse.data.answers) {
         answersData = answersResponse.data.answers;
+        paginationData = answersResponse.data;
         console.log("Using response.data.answers");
       } else if (Array.isArray(answersResponse.data)) {
         answersData = answersResponse.data;
         console.log("Using response.data as array");
+        // If no pagination data, set defaults
+        paginationData = {
+          current_page: 1,
+          last_page: 1,
+          total: answersData.length,
+          per_page: answersData.length,
+        };
       }
+
+      // Set pagination metadata
+      setCurrentPage(paginationData.current_page || 1);
+      setLastPage(paginationData.last_page || 1);
+      setTotalAnswers(paginationData.total || answersData.length);
+      setPerPage(paginationData.per_page || 10);
 
       // Debug each answer's vote data
       console.log("===== ANSWER VOTE DATA DEBUG =====");
-      console.log(`Total answers: ${answersData.length}`);
+      console.log(
+        `Showing ${answersData.length} of ${paginationData.total} answers`,
+      );
+      console.log(
+        `Page ${paginationData.current_page} of ${paginationData.last_page}`,
+      );
 
       answersData.forEach((answer, idx) => {
         console.log(`\n--- Answer ${idx + 1} (ID: ${answer.id}) ---`);
@@ -102,9 +131,59 @@ const QuestionDetails = () => {
     }
   };
 
+  // Fetch answers only (for pagination)
+  const fetchAnswers = async (page) => {
+    setPaginationLoading(true);
+    try {
+      const response = await api.get(
+        `/questions/${id}/answers?page=${page}&per_page=${perPage}`,
+      );
+
+      let answersData = [];
+      let paginationData = {};
+
+      if (response.data.data) {
+        answersData = response.data.data;
+        paginationData = response.data;
+      } else if (response.data.answers) {
+        answersData = response.data.answers;
+        paginationData = response.data;
+      } else if (Array.isArray(response.data)) {
+        answersData = response.data;
+        paginationData = {
+          current_page: page,
+          last_page: Math.ceil(totalAnswers / perPage),
+          total: totalAnswers,
+          per_page: perPage,
+        };
+      }
+
+      setAnswers(answersData);
+      setCurrentPage(paginationData.current_page || page);
+      setLastPage(paginationData.last_page || 1);
+      setTotalAnswers(paginationData.total || totalAnswers);
+
+      // Scroll to answers section smoothly
+      document.getElementById("answers-section")?.scrollIntoView({
+        behavior: "smooth",
+      });
+    } catch (error) {
+      console.error("Error fetching answers:", error);
+    } finally {
+      setPaginationLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, [id]);
+
+  // Handle page change
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= lastPage && page !== currentPage) {
+      fetchAnswers(page);
+    }
+  };
 
   // Submit answer
   const submitAnswer = async (e) => {
@@ -123,8 +202,8 @@ const QuestionDetails = () => {
       setAnswer("");
       setShowReplyForm(false);
 
-      // Refresh both question and answers
-      await fetchData();
+      // Refresh both question and answers, go to first page
+      await fetchData(1);
     } catch (error) {
       console.error(error);
       alert("Failed to post answer");
@@ -136,7 +215,9 @@ const QuestionDetails = () => {
   // Refresh answers only (for vote changes)
   const refreshAnswers = async () => {
     try {
-      const response = await api.get(`/questions/${id}/answers`);
+      const response = await api.get(
+        `/questions/${id}/answers?page=${currentPage}&per_page=${perPage}`,
+      );
       let answersData = [];
       if (response.data.data) {
         answersData = response.data.data;
@@ -184,7 +265,29 @@ const QuestionDetails = () => {
     return `${Math.floor(diffDays / 365)} years ago`;
   };
 
-  // Loading UI - Single loading state for everything
+  // Generate page numbers to display
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxVisible = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let endPage = Math.min(lastPage, startPage + maxVisible - 1);
+
+    if (endPage - startPage + 1 < maxVisible) {
+      startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  };
+
+  // Calculate showing range
+  const startItem = (currentPage - 1) * perPage + 1;
+  const endItem = Math.min(currentPage * perPage, totalAnswers);
+
+  // Loading UI
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
@@ -204,7 +307,7 @@ const QuestionDetails = () => {
           <div className="text-red-500 mb-2 text-4xl sm:text-5xl">⚠️</div>
           <p className="text-red-600 mb-4 text-sm sm:text-base">{error}</p>
           <button
-            onClick={fetchData}
+            onClick={() => fetchData()}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm sm:text-base"
           >
             Try Again
@@ -237,7 +340,7 @@ const QuestionDetails = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-6 sm:py-10 px-4 sm:px-6">
       <div className="max-w-4xl mx-auto">
-        {/* Back Button - Mobile Friendly */}
+        {/* Back Button */}
         <Link
           to="/all-questions"
           className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-4 sm:mb-6 text-sm sm:text-base group"
@@ -280,7 +383,7 @@ const QuestionDetails = () => {
                   📅 {formatDate(question.created_at)}
                 </span>
                 <span className="flex items-center gap-1">
-                  💬 {answers.length} answers
+                  💬 {totalAnswers} answers
                 </span>
               </div>
             </div>
@@ -356,21 +459,27 @@ const QuestionDetails = () => {
           </div>
         )}
 
-        {/* Answers Section */}
-        <div className="mt-6 sm:mt-8">
-          <div className="flex items-center justify-between mb-4 sm:mb-6">
+        {/* Answers Section with Pagination */}
+        <div id="answers-section" className="mt-6 sm:mt-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
-              Answers ({answers.length})
+              Answers ({totalAnswers})
             </h2>
-            {answers.length > 0 && (
-              <span className="text-xs sm:text-sm text-gray-500">
-                {answers.length}{" "}
-                {answers.length === 1 ? "response" : "responses"}
-              </span>
+            {totalAnswers > 0 && (
+              <div className="text-xs sm:text-sm text-gray-500">
+                Showing {startItem} - {endItem} of {totalAnswers} answers
+              </div>
             )}
           </div>
 
-          {answers.length === 0 ? (
+          {/* Pagination Loading State */}
+          {paginationLoading && (
+            <div className="flex justify-center py-8">
+              <div className="w-8 h-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin"></div>
+            </div>
+          )}
+
+          {!paginationLoading && answers.length === 0 ? (
             <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-200 p-8 sm:p-12 text-center">
               <div className="text-5xl sm:text-6xl mb-4">💭</div>
               <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">
@@ -381,67 +490,153 @@ const QuestionDetails = () => {
               </p>
             </div>
           ) : (
-            <div className="space-y-4 sm:space-y-6">
-              {answers.map((answer, index) => (
-                <div
-                  key={answer.id}
-                  className="bg-white rounded-lg sm:rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 overflow-hidden animate-fade-in"
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                >
-                  {/* Answer Header */}
-                  <div className="p-4 sm:p-6 bg-gray-50 border-b border-gray-100">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                          <span className="text-purple-600 font-semibold text-sm sm:text-base">
-                            {answer.user?.name?.charAt(0).toUpperCase() || "?"}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-700 text-sm sm:text-base">
-                            {answer.user?.name || "Anonymous User"}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            Answered {getRelativeDate(answer.created_at)}
-                          </p>
+            !paginationLoading && (
+              <>
+                <div className="space-y-4 sm:space-y-6">
+                  {answers.map((answer, index) => (
+                    <div
+                      key={answer.id}
+                      className="bg-white rounded-lg sm:rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 overflow-hidden animate-fade-in"
+                      style={{ animationDelay: `${index * 0.1}s` }}
+                    >
+                      {/* Answer Header */}
+                      <div className="p-4 sm:p-6 bg-gray-50 border-b border-gray-100">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-full flex items-center justify-center">
+                              <span className="text-purple-600 font-semibold text-sm sm:text-base">
+                                {answer.user?.name?.charAt(0).toUpperCase() ||
+                                  "?"}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-700 text-sm sm:text-base">
+                                {answer.user?.name || "Anonymous User"}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                Answered {getRelativeDate(answer.created_at)}
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  {/* Answer Body */}
-                  <div className="p-4 sm:p-6">
-                    <p className="text-gray-700 text-sm sm:text-base leading-relaxed whitespace-pre-wrap">
-                      {answer.body}
-                    </p>
-                  </div>
+                      {/* Answer Body */}
+                      <div className="p-4 sm:p-6">
+                        <p className="text-gray-700 text-sm sm:text-base leading-relaxed whitespace-pre-wrap">
+                          {answer.body}
+                        </p>
+                      </div>
 
-                  {/* Answer Actions with Vote Button */}
-                  <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex items-center justify-between">
-                    <VoteButton
-                      itemId={answer.id}
-                      itemType="answer"
-                      initialVotes={answer.votes_count || answer.votes || 0}
-                      initialUserVote={answer.user_vote}
-                      onVoteChange={refreshAnswers}
-                    />
-                  </div>
-                  {!isAuthenticated && (
-                    <div className="px-4 sm:px-6 pb-4">
-                      <p className="text-xs text-gray-400">
-                        <Link
-                          to="/login"
-                          className="text-blue-600 hover:underline"
-                        >
-                          Sign in
-                        </Link>{" "}
-                        to vote
-                      </p>
+                      {/* Answer Actions with Vote Button */}
+                      <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex items-center justify-between">
+                        <VoteButton
+                          itemId={answer.id}
+                          itemType="answer"
+                          initialVotes={answer.votes_count || answer.votes || 0}
+                          initialUserVote={answer.user_vote}
+                          onVoteChange={refreshAnswers}
+                        />
+                      </div>
+                      {!isAuthenticated && (
+                        <div className="px-4 sm:px-6 pb-4">
+                          <p className="text-xs text-gray-400">
+                            <Link
+                              to="/login"
+                              className="text-blue-600 hover:underline"
+                            >
+                              Sign in
+                            </Link>{" "}
+                            to vote
+                          </p>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
+
+                {/* Pagination Controls */}
+                {lastPage > 1 && (
+                  <div className="mt-8">
+                    <div className="flex justify-center items-center gap-2 flex-wrap">
+                      {/* First Page Button */}
+                      <button
+                        onClick={() => handlePageChange(1)}
+                        disabled={currentPage === 1}
+                        className={`px-3 py-2 rounded-lg transition ${
+                          currentPage === 1
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        ⟪ First
+                      </button>
+
+                      {/* Previous Button */}
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className={`px-3 py-2 rounded-lg transition ${
+                          currentPage === 1
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        ← Previous
+                      </button>
+
+                      {/* Page Numbers */}
+                      <div className="flex gap-1">
+                        {getPageNumbers().map((page) => (
+                          <button
+                            key={page}
+                            onClick={() => handlePageChange(page)}
+                            className={`px-3 py-2 rounded-lg transition min-w-[40px] ${
+                              currentPage === page
+                                ? "bg-blue-600 text-white"
+                                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Next Button */}
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === lastPage}
+                        className={`px-3 py-2 rounded-lg transition ${
+                          currentPage === lastPage
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        Next →
+                      </button>
+
+                      {/* Last Page Button */}
+                      <button
+                        onClick={() => handlePageChange(lastPage)}
+                        disabled={currentPage === lastPage}
+                        className={`px-3 py-2 rounded-lg transition ${
+                          currentPage === lastPage
+                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        }`}
+                      >
+                        Last ⟫
+                      </button>
+                    </div>
+
+                    {/* Page Info */}
+                    <div className="text-center mt-4 text-sm text-gray-500">
+                      Page {currentPage} of {lastPage}
+                    </div>
+                  </div>
+                )}
+              </>
+            )
           )}
         </div>
       </div>
