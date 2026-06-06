@@ -9,9 +9,9 @@ const QuestionDetails = () => {
   const { isAuthenticated } = useAuth();
 
   const [question, setQuestion] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [answers, setAnswers] = useState([]);
+  const [loading, setLoading] = useState(true); // Single loading state for both
+  const [error, setError] = useState(null);
   const [debugInfo, setDebugInfo] = useState({});
 
   // Reply state
@@ -19,40 +19,91 @@ const QuestionDetails = () => {
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch question
-  const fetchQuestion = async (isSilent = false) => {
-    if (!isSilent) {
-      setLoading(true);
-    }
+  // Fetch both question and answers simultaneously
+  const fetchData = async () => {
+    setLoading(true);
     setError(null);
 
     try {
-      const response = await api.get(`/questions/${id}`);
+      // Fetch question and answers in parallel
+      const [questionResponse, answersResponse] = await Promise.all([
+        api.get(`/questions/${id}`),
+        api.get(`/questions/${id}/answers`),
+      ]);
+
       console.log("===== QUESTION DATA =====");
-      console.log("Question details:", response.data.data);
-      console.log("Question user_vote:", response.data.data.user_vote);
-      console.log("Question votes_count:", response.data.data.votes_count);
-      setQuestion(response.data.data);
+      console.log("Question details:", questionResponse.data.data);
+      console.log("Question user_vote:", questionResponse.data.data.user_vote);
+      console.log(
+        "Question votes_count:",
+        questionResponse.data.data.votes_count,
+      );
+      setQuestion(questionResponse.data.data);
 
       setDebugInfo((prev) => ({
         ...prev,
         question: {
-          user_vote: response.data.data.user_vote,
-          votes_count: response.data.data.votes_count,
+          user_vote: questionResponse.data.data.user_vote,
+          votes_count: questionResponse.data.data.votes_count,
         },
       }));
-    } catch (error) {
-      console.error(error);
-      setError("Failed to fetch question details");
-    } finally {
-      if (!isSilent) {
-        setLoading(false);
+
+      // Process answers
+      console.log("===== ANSWERS API RESPONSE =====");
+      console.log("Full response:", answersResponse.data);
+
+      let answersData = [];
+      if (answersResponse.data.data) {
+        answersData = answersResponse.data.data;
+        console.log("Using response.data.data");
+      } else if (answersResponse.data.answers) {
+        answersData = answersResponse.data.answers;
+        console.log("Using response.data.answers");
+      } else if (Array.isArray(answersResponse.data)) {
+        answersData = answersResponse.data;
+        console.log("Using response.data as array");
       }
+
+      // Debug each answer's vote data
+      console.log("===== ANSWER VOTE DATA DEBUG =====");
+      console.log(`Total answers: ${answersData.length}`);
+
+      answersData.forEach((answer, idx) => {
+        console.log(`\n--- Answer ${idx + 1} (ID: ${answer.id}) ---`);
+        console.log("votes_count property:", answer.votes_count);
+        console.log("user_vote property:", answer.user_vote);
+        if (answer.user) {
+          console.log("User name:", answer.user.name);
+        }
+      });
+
+      setDebugInfo((prev) => ({
+        ...prev,
+        answers: answersData.map((a) => ({
+          id: a.id,
+          user_vote: a.user_vote,
+          votes_count: a.votes_count,
+        })),
+      }));
+
+      setAnswers(answersData);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+
+      if (error.response?.status === 404) {
+        setError("Question not found");
+      } else if (error.response?.status === 500) {
+        setError("Server error. Please try again later.");
+      } else {
+        setError("Failed to load question details");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchQuestion();
+    fetchData();
   }, [id]);
 
   // Submit answer
@@ -73,8 +124,7 @@ const QuestionDetails = () => {
       setShowReplyForm(false);
 
       // Refresh both question and answers
-      await fetchQuestion(true);
-      await getAnswers();
+      await fetchData();
     } catch (error) {
       console.error(error);
       alert("Failed to post answer");
@@ -83,92 +133,33 @@ const QuestionDetails = () => {
     }
   };
 
-  // GET ANSWERS with user information
-  const getAnswers = async () => {
+  // Refresh answers only (for vote changes)
+  const refreshAnswers = async () => {
     try {
       const response = await api.get(`/questions/${id}/answers`);
-      console.log("===== ANSWERS API RESPONSE =====");
-      console.log("Full response:", response.data);
-
       let answersData = [];
       if (response.data.data) {
         answersData = response.data.data;
-        console.log("Using response.data.data");
       } else if (response.data.answers) {
         answersData = response.data.answers;
-        console.log("Using response.data.answers");
       } else if (Array.isArray(response.data)) {
         answersData = response.data;
-        console.log("Using response.data as array");
-      } else {
-        console.log("No answers data found, setting empty array");
-        setAnswers([]);
-        return;
       }
-
-      // Debug each answer's vote data
-      console.log("===== ANSWER VOTE DATA DEBUG =====");
-      console.log(`Total answers: ${answersData.length}`);
-
-      answersData.forEach((answer, idx) => {
-        console.log(`\n--- Answer ${idx + 1} (ID: ${answer.id}) ---`);
-        console.log("Full answer object:", answer);
-        console.log("votes_count property:", answer.votes_count);
-        console.log("votes property:", answer.votes);
-        console.log("user_vote property:", answer.user_vote);
-        console.log(
-          "Has user_vote?",
-          answer.user_vote !== undefined && answer.user_vote !== null,
-        );
-        console.log(
-          "Has votes_count?",
-          answer.votes_count !== undefined && answer.votes_count !== null,
-        );
-
-        // Check if the answer has user data
-        if (answer.user) {
-          console.log("User name:", answer.user.name);
-        }
-      });
-
-      // Store debug info
-      setDebugInfo((prev) => ({
-        ...prev,
-        answers: answersData.map((a) => ({
-          id: a.id,
-          user_vote: a.user_vote,
-          votes_count: a.votes_count,
-          has_user_vote: a.user_vote !== undefined && a.user_vote !== null,
-          has_votes_count:
-            a.votes_count !== undefined && a.votes_count !== null,
-        })),
-      }));
-
       setAnswers(answersData);
     } catch (error) {
-      console.error("Error fetching answers:", error);
-      console.error("Error response:", error.response?.data);
-
-      if (error.response?.status === 404) {
-        console.log("404 - No answers endpoint found");
-        setAnswers([]);
-        return;
-      }
-
-      if (error.response?.status === 500) {
-        console.warn(
-          "Server error - answers endpoint might not be implemented",
-        );
-        setAnswers([]);
-      } else {
-        setError("Failed to fetch answers");
-      }
+      console.error("Error refreshing answers:", error);
     }
   };
 
-  useEffect(() => {
-    getAnswers();
-  }, [id]);
+  // Refresh question only (for vote changes)
+  const refreshQuestion = async () => {
+    try {
+      const response = await api.get(`/questions/${id}`);
+      setQuestion(response.data.data);
+    } catch (error) {
+      console.error("Error refreshing question:", error);
+    }
+  };
 
   // Format date
   const formatDate = (date) => {
@@ -193,13 +184,13 @@ const QuestionDetails = () => {
     return `${Math.floor(diffDays / 365)} years ago`;
   };
 
-  // Loading UI
-  if (loading && !question) {
+  // Loading UI - Single loading state for everything
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin mb-4"></div>
         <p className="text-sm sm:text-base text-gray-500">
-          Loading question...
+          Loading question and answers...
         </p>
       </div>
     );
@@ -213,7 +204,7 @@ const QuestionDetails = () => {
           <div className="text-red-500 mb-2 text-4xl sm:text-5xl">⚠️</div>
           <p className="text-red-600 mb-4 text-sm sm:text-base">{error}</p>
           <button
-            onClick={() => fetchQuestion()}
+            onClick={fetchData}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm sm:text-base"
           >
             Try Again
@@ -317,7 +308,7 @@ const QuestionDetails = () => {
                 itemType="question"
                 initialVotes={question.votes_count || question.votes || 0}
                 initialUserVote={question.user_vote}
-                onVoteChange={() => fetchQuestion(true)}
+                onVoteChange={refreshQuestion}
               />
             </div>
             {!isAuthenticated && (
@@ -432,7 +423,7 @@ const QuestionDetails = () => {
                       itemType="answer"
                       initialVotes={answer.votes_count || answer.votes || 0}
                       initialUserVote={answer.user_vote}
-                      onVoteChange={getAnswers}
+                      onVoteChange={refreshAnswers}
                     />
                   </div>
                   {!isAuthenticated && (
