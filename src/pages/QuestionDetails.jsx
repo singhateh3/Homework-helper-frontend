@@ -257,40 +257,6 @@ const QuestionDetails = () => {
           Back to Questions
         </Link>
 
-        {/* Debug Panel - Remove in production */}
-        {debugInfo.answers && debugInfo.answers.length > 0 && (
-          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs">
-            <details>
-              <summary className="font-semibold cursor-pointer">
-                🔧 Debug Info (Click to expand)
-              </summary>
-              <div className="mt-2">
-                <p>
-                  <strong>Authenticated:</strong>{" "}
-                  {isAuthenticated ? "Yes" : "No"}
-                </p>
-                <p>
-                  <strong>Answers count:</strong> {answers.length}
-                </p>
-                <p>
-                  <strong>Question user_vote:</strong>{" "}
-                  {debugInfo.question?.user_vote ?? "null"}
-                </p>
-                <p>
-                  <strong>Question votes_count:</strong>{" "}
-                  {debugInfo.question?.votes_count ?? 0}
-                </p>
-                <div className="mt-2">
-                  <strong>Answers vote data:</strong>
-                  <pre className="mt-1 text-xs bg-gray-100 p-2 rounded overflow-auto max-h-40">
-                    {JSON.stringify(debugInfo.answers, null, 2)}
-                  </pre>
-                </div>
-              </div>
-            </details>
-          </div>
-        )}
-
         {/* Question Card */}
         <div className="bg-white rounded-lg sm:rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 overflow-hidden">
           {/* Question Header */}
@@ -448,19 +414,6 @@ const QuestionDetails = () => {
                             Answered {getRelativeDate(answer.created_at)}
                           </p>
                         </div>
-                      </div>
-                      {/* Debug badge - remove in production */}
-                      <div className="text-xs text-gray-400">
-                        {answer.user_vote !== undefined &&
-                        answer.user_vote !== null ? (
-                          <span className="text-green-600">
-                            ✓ has user_vote: {answer.user_vote}
-                          </span>
-                        ) : (
-                          <span className="text-red-500">
-                            ⚠️ user_vote missing
-                          </span>
-                        )}
                       </div>
                     </div>
                   </div>
