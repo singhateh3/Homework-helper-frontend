@@ -1,7 +1,18 @@
 import axios from "axios";
 
+// Force localhost in development
+const getBaseURL = () => {
+  // Check if we're in development mode
+  if (import.meta.env.DEV) {
+    return "http://127.0.0.1:8000/api";
+  }
+
+  // Production: use environment variable or fallback
+  return import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api",
+  baseURL: getBaseURL(),
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",

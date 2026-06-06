@@ -1,6 +1,10 @@
 import { Link } from "react-router-dom";
+import VoteButton from "./VoteButton";
+import { useAuth } from "../context/AuthContext";
 
-const QuestionCard = ({ question }) => {
+const QuestionCard = ({ question, onVoteChange }) => {
+  const { isAuthenticated } = useAuth();
+
   const truncateText = (text, maxLength = 150) => {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + "...";
@@ -22,8 +26,8 @@ const QuestionCard = ({ question }) => {
   };
 
   return (
-    <Link to={`/questions/${question.id}`}>
-      <div className="group bg-white rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-200 hover:border-blue-300 hover:scale-[1.01] sm:hover:scale-[1.02]">
+    <div className="group bg-white rounded-lg p-4 sm:p-6 shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-200 hover:border-blue-300 hover:scale-[1.01] sm:hover:scale-[1.02]">
+      <Link to={`/questions/${question.id}`}>
         {/* Mobile Layout (simplified) */}
         <div className="sm:hidden">
           <h2 className="text-base font-semibold text-gray-800 mb-2 hover:text-blue-600 line-clamp-2">
@@ -40,10 +44,6 @@ const QuestionCard = ({ question }) => {
               <span>•</span>
               <span className="flex items-center gap-1">
                 💬 {question.answers_count || 0}
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                👍 {question.votes || 0}
               </span>
             </div>
             <span className="text-xs text-gray-400">
@@ -97,13 +97,6 @@ const QuestionCard = ({ question }) => {
                   answers
                 </span>
               </div>
-
-              <span className="text-gray-300">•</span>
-
-              <div className="flex items-center gap-1">
-                <span>👍</span>
-                <span>{question.votes || 0} votes</span>
-              </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -137,8 +130,27 @@ const QuestionCard = ({ question }) => {
             </div>
           )}
         </div>
+      </Link>
+
+      {/* Vote Section - Outside Link to prevent voting when clicking the card */}
+      <div className="mt-4 pt-4 border-t border-gray-100">
+        <VoteButton
+          itemId={question.id}
+          itemType="question"
+          initialVotes={question.votes_count || question.votes || 0}
+          initialUserVote={question.user_vote}
+          onVoteChange={onVoteChange}
+        />
+        {!isAuthenticated && (
+          <p className="text-xs text-gray-400 mt-2">
+            <Link to="/login" className="text-blue-600 hover:underline">
+              Sign in
+            </Link>{" "}
+            to vote
+          </p>
+        )}
       </div>
-    </Link>
+    </div>
   );
 };
 

@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import api from "../services/api";
+import VoteButton from "../components/VoteButton";
+import { useAuth } from "../context/AuthContext";
 
 const QuestionDetails = () => {
   const { id } = useParams();
+  const { isAuthenticated } = useAuth();
 
   const [question, setQuestion] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [answers, setAnswers] = useState([]);
+  const [debugInfo, setDebugInfo] = useState({});
 
   // Reply state
   const [showReplyForm, setShowReplyForm] = useState(false);
@@ -16,19 +20,34 @@ const QuestionDetails = () => {
   const [submitting, setSubmitting] = useState(false);
 
   // Fetch question
-  const fetchQuestion = async () => {
-    setLoading(true);
+  const fetchQuestion = async (isSilent = false) => {
+    if (!isSilent) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
       const response = await api.get(`/questions/${id}`);
-      console.log(response.data);
+      console.log("===== QUESTION DATA =====");
+      console.log("Question details:", response.data.data);
+      console.log("Question user_vote:", response.data.data.user_vote);
+      console.log("Question votes_count:", response.data.data.votes_count);
       setQuestion(response.data.data);
+
+      setDebugInfo((prev) => ({
+        ...prev,
+        question: {
+          user_vote: response.data.data.user_vote,
+          votes_count: response.data.data.votes_count,
+        },
+      }));
     } catch (error) {
       console.error(error);
       setError("Failed to fetch question details");
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -54,7 +73,7 @@ const QuestionDetails = () => {
       setShowReplyForm(false);
 
       // Refresh both question and answers
-      await fetchQuestion();
+      await fetchQuestion(true);
       await getAnswers();
     } catch (error) {
       console.error(error);
@@ -68,21 +87,70 @@ const QuestionDetails = () => {
   const getAnswers = async () => {
     try {
       const response = await api.get(`/questions/${id}/answers`);
-      console.log("Fetched answers:", response.data);
+      console.log("===== ANSWERS API RESPONSE =====");
+      console.log("Full response:", response.data);
 
+      let answersData = [];
       if (response.data.data) {
-        setAnswers(response.data.data);
+        answersData = response.data.data;
+        console.log("Using response.data.data");
       } else if (response.data.answers) {
-        setAnswers(response.data.answers);
+        answersData = response.data.answers;
+        console.log("Using response.data.answers");
       } else if (Array.isArray(response.data)) {
-        setAnswers(response.data);
+        answersData = response.data;
+        console.log("Using response.data as array");
       } else {
+        console.log("No answers data found, setting empty array");
         setAnswers([]);
+        return;
       }
+
+      // Debug each answer's vote data
+      console.log("===== ANSWER VOTE DATA DEBUG =====");
+      console.log(`Total answers: ${answersData.length}`);
+
+      answersData.forEach((answer, idx) => {
+        console.log(`\n--- Answer ${idx + 1} (ID: ${answer.id}) ---`);
+        console.log("Full answer object:", answer);
+        console.log("votes_count property:", answer.votes_count);
+        console.log("votes property:", answer.votes);
+        console.log("user_vote property:", answer.user_vote);
+        console.log(
+          "Has user_vote?",
+          answer.user_vote !== undefined && answer.user_vote !== null,
+        );
+        console.log(
+          "Has votes_count?",
+          answer.votes_count !== undefined && answer.votes_count !== null,
+        );
+
+        // Check if the answer has user data
+        if (answer.user) {
+          console.log("User name:", answer.user.name);
+        }
+      });
+
+      // Store debug info
+      setDebugInfo((prev) => ({
+        ...prev,
+        answers: answersData.map((a) => ({
+          id: a.id,
+          user_vote: a.user_vote,
+          votes_count: a.votes_count,
+          has_user_vote: a.user_vote !== undefined && a.user_vote !== null,
+          has_votes_count:
+            a.votes_count !== undefined && a.votes_count !== null,
+        })),
+      }));
+
+      setAnswers(answersData);
     } catch (error) {
       console.error("Error fetching answers:", error);
+      console.error("Error response:", error.response?.data);
 
       if (error.response?.status === 404) {
+        console.log("404 - No answers endpoint found");
         setAnswers([]);
         return;
       }
@@ -145,7 +213,7 @@ const QuestionDetails = () => {
           <div className="text-red-500 mb-2 text-4xl sm:text-5xl">⚠️</div>
           <p className="text-red-600 mb-4 text-sm sm:text-base">{error}</p>
           <button
-            onClick={fetchQuestion}
+            onClick={() => fetchQuestion()}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm sm:text-base"
           >
             Try Again
@@ -189,6 +257,40 @@ const QuestionDetails = () => {
           Back to Questions
         </Link>
 
+        {/* Debug Panel - Remove in production */}
+        {debugInfo.answers && debugInfo.answers.length > 0 && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs">
+            <details>
+              <summary className="font-semibold cursor-pointer">
+                🔧 Debug Info (Click to expand)
+              </summary>
+              <div className="mt-2">
+                <p>
+                  <strong>Authenticated:</strong>{" "}
+                  {isAuthenticated ? "Yes" : "No"}
+                </p>
+                <p>
+                  <strong>Answers count:</strong> {answers.length}
+                </p>
+                <p>
+                  <strong>Question user_vote:</strong>{" "}
+                  {debugInfo.question?.user_vote ?? "null"}
+                </p>
+                <p>
+                  <strong>Question votes_count:</strong>{" "}
+                  {debugInfo.question?.votes_count ?? 0}
+                </p>
+                <div className="mt-2">
+                  <strong>Answers vote data:</strong>
+                  <pre className="mt-1 text-xs bg-gray-100 p-2 rounded overflow-auto max-h-40">
+                    {JSON.stringify(debugInfo.answers, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </details>
+          </div>
+        )}
+
         {/* Question Card */}
         <div className="bg-white rounded-lg sm:rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 overflow-hidden">
           {/* Question Header */}
@@ -216,7 +318,7 @@ const QuestionDetails = () => {
               </div>
 
               {/* Metadata */}
-              <div className="flex flex-wrap gap-3 text-xs sm:text-sm text-gray-500">
+              <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-500">
                 <span className="flex items-center gap-1">
                   📅 {formatDate(question.created_at)}
                 </span>
@@ -234,14 +336,32 @@ const QuestionDetails = () => {
             </p>
           </div>
 
-          {/* Actions */}
+          {/* Actions with Vote Button */}
           <div className="p-4 sm:p-6 bg-white border-t border-gray-100">
-            <button
-              onClick={() => setShowReplyForm(!showReplyForm)}
-              className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold hover:bg-blue-700 transition transform hover:scale-105 text-sm sm:text-base"
-            >
-              ✏️ {showReplyForm ? "Cancel Reply" : "Write an Answer"}
-            </button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <button
+                onClick={() => setShowReplyForm(!showReplyForm)}
+                className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold hover:bg-blue-700 transition transform hover:scale-105 text-sm sm:text-base"
+              >
+                ✏️ {showReplyForm ? "Cancel Reply" : "Write an Answer"}
+              </button>
+
+              <VoteButton
+                itemId={question.id}
+                itemType="question"
+                initialVotes={question.votes_count || question.votes || 0}
+                initialUserVote={question.user_vote}
+                onVoteChange={() => fetchQuestion(true)}
+              />
+            </div>
+            {!isAuthenticated && (
+              <p className="text-xs text-gray-400 mt-3">
+                <Link to="/login" className="text-blue-600 hover:underline">
+                  Sign in
+                </Link>{" "}
+                to vote
+              </p>
+            )}
           </div>
         </div>
 
@@ -329,10 +449,18 @@ const QuestionDetails = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500">
-                        <span>👍 {answer.votes || 0} votes</span>
-                        <span>•</span>
-                        <span>📅 {formatDate(answer.created_at)}</span>
+                      {/* Debug badge - remove in production */}
+                      <div className="text-xs text-gray-400">
+                        {answer.user_vote !== undefined &&
+                        answer.user_vote !== null ? (
+                          <span className="text-green-600">
+                            ✓ has user_vote: {answer.user_vote}
+                          </span>
+                        ) : (
+                          <span className="text-red-500">
+                            ⚠️ user_vote missing
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -344,12 +472,29 @@ const QuestionDetails = () => {
                     </p>
                   </div>
 
-                  {/* Answer Actions (Optional) */}
-                  <div className="px-4 sm:px-6 pb-4 sm:pb-6">
-                    <button className="text-gray-400 hover:text-blue-600 text-xs sm:text-sm transition flex items-center gap-1">
-                      👍 Helpful
-                    </button>
+                  {/* Answer Actions with Vote Button */}
+                  <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex items-center justify-between">
+                    <VoteButton
+                      itemId={answer.id}
+                      itemType="answer"
+                      initialVotes={answer.votes_count || answer.votes || 0}
+                      initialUserVote={answer.user_vote}
+                      onVoteChange={getAnswers}
+                    />
                   </div>
+                  {!isAuthenticated && (
+                    <div className="px-4 sm:px-6 pb-4">
+                      <p className="text-xs text-gray-400">
+                        <Link
+                          to="/login"
+                          className="text-blue-600 hover:underline"
+                        >
+                          Sign in
+                        </Link>{" "}
+                        to vote
+                      </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -357,7 +502,6 @@ const QuestionDetails = () => {
         </div>
       </div>
 
-      {/* Add animation styles */}
       <style jsx>{`
         @keyframes fade-in {
           from {

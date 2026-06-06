@@ -43,13 +43,20 @@ const Register = () => {
 
     try {
       const response = await api.post("/register", formData);
-      const token = response.data.token || response.data.access_token;
+      console.log("Register response:", response.data);
 
-      if (token) {
+      const token = response.data.token || response.data.access_token;
+      const userData = response.data.user; // Get user data from response
+
+      if (token && userData) {
+        login(token, userData); // Pass both token and user data
+        navigate("/");
+      } else if (token) {
+        // If no user data in response, just pass token
         login(token);
         navigate("/");
       } else {
-        navigate("/login");
+        setError("Invalid response from server");
       }
     } catch (error) {
       console.error(error);

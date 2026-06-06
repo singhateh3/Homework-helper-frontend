@@ -45,6 +45,17 @@ function Home() {
     }
   };
 
+  // Update only the specific question that was voted on
+  const updateQuestionVote = (questionId, newVotesCount, newUserVote) => {
+    setQuestions((prevQuestions) =>
+      prevQuestions.map((q) =>
+        q.id === questionId
+          ? { ...q, votes_count: newVotesCount, user_vote: newUserVote }
+          : q,
+      ),
+    );
+  };
+
   useEffect(() => {
     fetchQuestions();
     fetchStats();
@@ -232,7 +243,11 @@ function Home() {
             ) : (
               <div className="space-y-3 sm:space-y-4">
                 {questions.map((q) => (
-                  <QuestionCard key={q.id} question={q} />
+                  <QuestionCard
+                    key={q.id}
+                    question={q}
+                    onVoteChange={updateQuestionVote}
+                  />
                 ))}
               </div>
             )}

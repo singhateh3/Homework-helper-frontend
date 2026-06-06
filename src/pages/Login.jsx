@@ -35,9 +35,16 @@ const Login = () => {
 
     try {
       const response = await api.post("/login", formData);
-      const token = response.data.token || response.data.access_token;
+      console.log("Login response:", response.data);
 
-      if (token) {
+      const token = response.data.token || response.data.access_token;
+      const userData = response.data.user; // Get user data from response
+
+      if (token && userData) {
+        login(token, userData); // Pass both token and user data
+        navigate("/");
+      } else if (token) {
+        // If no user data in response, just pass token
         login(token);
         navigate("/");
       } else {
@@ -47,6 +54,8 @@ const Login = () => {
       console.error(error);
       if (error.response?.status === 401) {
         setError("Invalid email or password");
+      } else if (error.response?.data?.message) {
+        setError(error.response.data.message);
       } else {
         setError("Login failed. Please try again.");
       }

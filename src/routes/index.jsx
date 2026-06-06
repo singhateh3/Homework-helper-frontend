@@ -7,6 +7,7 @@ import CreateQuestion from "../pages/CreateQuestion.jsx";
 import AllQuestions from "../pages/AllQuestions.jsx";
 import QuestionDetails from "../pages/QuestionDetails.jsx";
 import ProtectedRoute from "../components/ProtectedRoute";
+import Layout from "../components/Layout";
 
 const router = createBrowserRouter([
   // Public routes (no authentication needed)
@@ -18,38 +19,43 @@ const router = createBrowserRouter([
     path: "/register",
     element: <Register />,
   },
-  // Protected routes (require authentication)
+  // Protected routes with Layout
   {
-    path: "/",
-    element: (
-      <ProtectedRoute>
-        <Home />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/ask-question",
-    element: (
-      <ProtectedRoute>
-        <CreateQuestion />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/all-questions",
-    element: (
-      <ProtectedRoute>
-        <AllQuestions />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/questions/:id",
-    element: (
-      <ProtectedRoute>
-        <QuestionDetails />
-      </ProtectedRoute>
-    ),
+    element: <Layout />,
+    children: [
+      {
+        path: "/",
+        element: (
+          <ProtectedRoute>
+            <Home />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/ask-question",
+        element: (
+          <ProtectedRoute>
+            <CreateQuestion />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/all-questions",
+        element: (
+          <ProtectedRoute>
+            <AllQuestions />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "/questions/:id",
+        element: (
+          <ProtectedRoute>
+            <QuestionDetails />
+          </ProtectedRoute>
+        ),
+      },
+    ],
   },
   // 404 route
   {
