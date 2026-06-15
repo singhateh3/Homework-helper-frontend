@@ -1,24 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import api from "../services/api";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login, isAuthenticated } = useAuth();
+  const { login } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/", { replace: true });
-    }
-  }, [isAuthenticated, navigate]);
 
   const handleChange = (e) => {
     setFormData({
@@ -38,15 +31,16 @@ const Login = () => {
       console.log("Login response:", response.data);
 
       const token = response.data.token || response.data.access_token;
-      const userData = response.data.user; // Get user data from response
+      const userData = response.data.user;
 
       if (token && userData) {
-        login(token, userData); // Pass both token and user data
-        navigate("/");
-      } else if (token) {
-        // If no user data in response, just pass token
-        login(token);
-        navigate("/");
+        // Call login from context
+        login(token, userData);
+
+        // Force navigation after a short delay to ensure state updates
+        setTimeout(() => {
+          navigate("/", { replace: true });
+        }, 100);
       } else {
         setError("Invalid response from server");
       }

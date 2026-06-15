@@ -1,187 +1,127 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import api from "../services/api";
-import VoteButton from "../components/VoteButton";
 import { useAuth } from "../context/AuthContext";
 
 const QuestionDetails = () => {
   const { id } = useParams();
-  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [question, setQuestion] = useState(null);
-  const [answers, setAnswers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [debugInfo, setDebugInfo] = useState({});
+  const [answers, setAnswers] = useState([]);
 
-  // Pagination state for answers
-  const [currentPage, setCurrentPage] = useState(1);
-  const [lastPage, setLastPage] = useState(1);
-  const [totalAnswers, setTotalAnswers] = useState(0);
-  const [perPage, setPerPage] = useState(10);
-  const [paginationLoading, setPaginationLoading] = useState(false);
+  // Modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    body: "",
+  });
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Reply state
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [answer, setAnswer] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch both question and answers simultaneously
-  const fetchData = async (page = 1) => {
+  // Check if current user is the owner
+  const isOwner = user && question && user.id === question.user_id;
+
+  // Fetch question
+  const fetchQuestion = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Fetch question and answers in parallel
-      const [questionResponse, answersResponse] = await Promise.all([
-        api.get(`/questions/${id}`),
-        api.get(`/questions/${id}/answers?page=${page}&per_page=${perPage}`),
-      ]);
+      const response = await api.get(`/questions/${id}`);
+      console.log(response.data);
+      setQuestion(response.data.data);
 
-      console.log("===== QUESTION DATA =====");
-      console.log("Question details:", questionResponse.data.data);
-      console.log("Question user_vote:", questionResponse.data.data.user_vote);
-      console.log(
-        "Question votes_count:",
-        questionResponse.data.data.votes_count,
-      );
-      setQuestion(questionResponse.data.data);
-
-      setDebugInfo((prev) => ({
-        ...prev,
-        question: {
-          user_vote: questionResponse.data.data.user_vote,
-          votes_count: questionResponse.data.data.votes_count,
-        },
-      }));
-
-      // Process answers with pagination data
-      console.log("===== ANSWERS API RESPONSE =====");
-      console.log("Full response:", answersResponse.data);
-
-      let answersData = [];
-      let paginationData = {};
-
-      if (answersResponse.data.data) {
-        answersData = answersResponse.data.data;
-        paginationData = answersResponse.data;
-        console.log("Using response.data.data");
-      } else if (answersResponse.data.answers) {
-        answersData = answersResponse.data.answers;
-        paginationData = answersResponse.data;
-        console.log("Using response.data.answers");
-      } else if (Array.isArray(answersResponse.data)) {
-        answersData = answersResponse.data;
-        console.log("Using response.data as array");
-        // If no pagination data, set defaults
-        paginationData = {
-          current_page: 1,
-          last_page: 1,
-          total: answersData.length,
-          per_page: answersData.length,
-        };
-      }
-
-      // Set pagination metadata
-      setCurrentPage(paginationData.current_page || 1);
-      setLastPage(paginationData.last_page || 1);
-      setTotalAnswers(paginationData.total || answersData.length);
-      setPerPage(paginationData.per_page || 10);
-
-      // Debug each answer's vote data
-      console.log("===== ANSWER VOTE DATA DEBUG =====");
-      console.log(
-        `Showing ${answersData.length} of ${paginationData.total} answers`,
-      );
-      console.log(
-        `Page ${paginationData.current_page} of ${paginationData.last_page}`,
-      );
-
-      answersData.forEach((answer, idx) => {
-        console.log(`\n--- Answer ${idx + 1} (ID: ${answer.id}) ---`);
-        console.log("votes_count property:", answer.votes_count);
-        console.log("user_vote property:", answer.user_vote);
-        if (answer.user) {
-          console.log("User name:", answer.user.name);
-        }
+      // Initialize edit form with current values
+      setEditForm({
+        title: response.data.data.title || "",
+        body: response.data.data.body || "",
       });
-
-      setDebugInfo((prev) => ({
-        ...prev,
-        answers: answersData.map((a) => ({
-          id: a.id,
-          user_vote: a.user_vote,
-          votes_count: a.votes_count,
-        })),
-      }));
-
-      setAnswers(answersData);
     } catch (error) {
-      console.error("Error fetching data:", error);
-
-      if (error.response?.status === 404) {
-        setError("Question not found");
-      } else if (error.response?.status === 500) {
-        setError("Server error. Please try again later.");
-      } else {
-        setError("Failed to load question details");
-      }
+      console.error(error);
+      setError("Failed to fetch question details");
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch answers only (for pagination)
-  const fetchAnswers = async (page) => {
-    setPaginationLoading(true);
+  useEffect(() => {
+    fetchQuestion();
+  }, [id]);
+
+  // Handle edit form input changes
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  // Submit edit/update
+  const handleUpdateQuestion = async (e) => {
+    e.preventDefault();
+
+    if (!editForm.title.trim() || !editForm.body.trim()) {
+      alert("Title and body cannot be empty");
+      return;
+    }
+
+    setIsUpdating(true);
+
     try {
-      const response = await api.get(
-        `/questions/${id}/answers?page=${page}&per_page=${perPage}`,
-      );
-
-      let answersData = [];
-      let paginationData = {};
-
-      if (response.data.data) {
-        answersData = response.data.data;
-        paginationData = response.data;
-      } else if (response.data.answers) {
-        answersData = response.data.answers;
-        paginationData = response.data;
-      } else if (Array.isArray(response.data)) {
-        answersData = response.data;
-        paginationData = {
-          current_page: page,
-          last_page: Math.ceil(totalAnswers / perPage),
-          total: totalAnswers,
-          per_page: perPage,
-        };
-      }
-
-      setAnswers(answersData);
-      setCurrentPage(paginationData.current_page || page);
-      setLastPage(paginationData.last_page || 1);
-      setTotalAnswers(paginationData.total || totalAnswers);
-
-      // Scroll to answers section smoothly
-      document.getElementById("answers-section")?.scrollIntoView({
-        behavior: "smooth",
+      const response = await api.put(`/questions/${id}`, {
+        title: editForm.title.trim(),
+        body: editForm.body.trim(),
       });
+
+      console.log("Update response:", response.data);
+
+      // Update the question state
+      setQuestion(response.data.data);
+      setShowEditModal(false);
+
+      // Show success message
+      alert("Question updated successfully!");
     } catch (error) {
-      console.error("Error fetching answers:", error);
+      console.error(error);
+      if (error.response?.status === 403) {
+        alert("You don't have permission to edit this question");
+      } else {
+        alert(error.response?.data?.message || "Failed to update question");
+      }
     } finally {
-      setPaginationLoading(false);
+      setIsUpdating(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [id]);
+  // Delete question
+  const handleDeleteQuestion = async () => {
+    setIsDeleting(true);
 
-  // Handle page change
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= lastPage && page !== currentPage) {
-      fetchAnswers(page);
+    try {
+      await api.delete(`/questions/${id}`);
+      alert("Question deleted successfully");
+      navigate("/all-questions");
+    } catch (error) {
+      console.error(error);
+      if (error.response?.status === 403) {
+        alert("You don't have permission to delete this question");
+      } else {
+        alert("Failed to delete question");
+      }
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
     }
   };
 
@@ -201,9 +141,8 @@ const QuestionDetails = () => {
 
       setAnswer("");
       setShowReplyForm(false);
-
-      // Refresh both question and answers, go to first page
-      await fetchData(1);
+      await fetchQuestion();
+      await getAnswers();
     } catch (error) {
       console.error(error);
       alert("Failed to post answer");
@@ -212,450 +151,339 @@ const QuestionDetails = () => {
     }
   };
 
-  // Refresh answers only (for vote changes)
-  const refreshAnswers = async () => {
+  // GET ANSWERS
+  const getAnswers = async () => {
     try {
-      const response = await api.get(
-        `/questions/${id}/answers?page=${currentPage}&per_page=${perPage}`,
-      );
-      let answersData = [];
+      const response = await api.get(`/questions/${id}/answers`);
+      console.log("Fetched answers:", response.data);
+
       if (response.data.data) {
-        answersData = response.data.data;
+        setAnswers(response.data.data);
       } else if (response.data.answers) {
-        answersData = response.data.answers;
-      } else if (Array.isArray(response.data)) {
-        answersData = response.data;
+        setAnswers(response.data.answers);
+      } else {
+        setAnswers([]);
       }
-      setAnswers(answersData);
     } catch (error) {
-      console.error("Error refreshing answers:", error);
+      console.error(error);
+      setError("Failed to fetch answers");
     }
   };
 
-  // Refresh question only (for vote changes)
-  const refreshQuestion = async () => {
-    try {
-      const response = await api.get(`/questions/${id}`);
-      setQuestion(response.data.data);
-    } catch (error) {
-      console.error("Error refreshing question:", error);
-    }
-  };
-
-  // Format date
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
-
-  const getRelativeDate = (date) => {
-    const now = new Date();
-    const past = new Date(date);
-    const diffTime = Math.abs(now - past);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return "Today";
-    if (diffDays === 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays} days ago`;
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
-    if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
-    return `${Math.floor(diffDays / 365)} years ago`;
-  };
-
-  // Generate page numbers to display
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxVisible = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-    let endPage = Math.min(lastPage, startPage + maxVisible - 1);
-
-    if (endPage - startPage + 1 < maxVisible) {
-      startPage = Math.max(1, endPage - maxVisible + 1);
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(i);
-    }
-
-    return pages;
-  };
-
-  // Calculate showing range
-  const startItem = (currentPage - 1) * perPage + 1;
-  const endItem = Math.min(currentPage * perPage, totalAnswers);
+  useEffect(() => {
+    getAnswers();
+  }, [id]);
 
   // Loading UI
-  if (loading) {
+  if (loading && !question) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin mb-4"></div>
-        <p className="text-sm sm:text-base text-gray-500">
-          Loading question and answers...
-        </p>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-9 h-9 rounded-full border-2 border-stone-200 border-t-stone-500 animate-spin" />
       </div>
     );
   }
 
   // Error UI
   if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="bg-red-50 border border-red-200 rounded-lg p-6 sm:p-8 text-center max-w-md">
-          <div className="text-red-500 mb-2 text-4xl sm:text-5xl">⚠️</div>
-          <p className="text-red-600 mb-4 text-sm sm:text-base">{error}</p>
-          <button
-            onClick={() => fetchData()}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm sm:text-base"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
+    return <p className="text-center py-10 text-red-500">{error}</p>;
   }
 
   // Not found
   if (!question) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 sm:p-8 text-center max-w-md">
-          <div className="text-yellow-500 mb-2 text-4xl sm:text-5xl">🔍</div>
-          <p className="text-yellow-600 text-sm sm:text-base">
-            Question not found.
-          </p>
-          <Link
-            to="/all-questions"
-            className="inline-block mt-4 text-blue-600 hover:text-blue-700"
-          >
-            ← Browse Questions
-          </Link>
-        </div>
-      </div>
-    );
+    return <p className="text-center py-10">Question not found.</p>;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-6 sm:py-10 px-4 sm:px-6">
-      <div className="max-w-4xl mx-auto">
-        {/* Back Button */}
-        <Link
-          to="/all-questions"
-          className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 mb-4 sm:mb-6 text-sm sm:text-base group"
-        >
-          <span className="group-hover:-translate-x-1 transition-transform">
-            ←
-          </span>
-          Back to Questions
-        </Link>
+    <div className="min-h-screen bg-gray-100 py-10 px-6">
+      <div className="max-w-4xl mx-auto bg-white p-8 rounded-xl shadow">
+        {/* QUESTION DISPLAY */}
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex-1">
+            <h1 className="text-3xl font-bold">{question.title}</h1>
 
-        {/* Question Card */}
-        <div className="bg-white rounded-lg sm:rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 overflow-hidden">
-          {/* Question Header */}
-          <div className="p-4 sm:p-6 md:p-8 border-b border-gray-100">
-            <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-gray-800 mb-3 sm:mb-4">
-              {question.title}
-            </h1>
-
-            {/* Author Info */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-blue-600 font-semibold text-sm sm:text-base">
-                    {question.user?.name?.charAt(0).toUpperCase() || "?"}
+            {/* Author info */}
+            <div className="flex items-center space-x-2 mt-2 text-sm text-gray-500">
+              <span>Asked by</span>
+              <span className="font-medium text-gray-700">
+                {question.user?.name || "Anonymous"}
+              </span>
+              <span>•</span>
+              <span>{new Date(question.created_at).toLocaleDateString()}</span>
+              {question.updated_at !== question.created_at && (
+                <>
+                  <span>•</span>
+                  <span className="text-gray-400">
+                    (Edited:{" "}
+                    {new Date(question.updated_at).toLocaleDateString()})
                   </span>
-                </div>
-                <div>
-                  <p className="font-medium text-gray-700 text-sm sm:text-base">
-                    {question.user?.name || "Anonymous User"}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    Posted {getRelativeDate(question.created_at)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Metadata */}
-              <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-gray-500">
-                <span className="flex items-center gap-1">
-                  📅 {formatDate(question.created_at)}
-                </span>
-                <span className="flex items-center gap-1">
-                  💬 {totalAnswers} answers
-                </span>
-              </div>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Question Body */}
-          <div className="p-4 sm:p-6 md:p-8 bg-gray-50">
-            <p className="text-gray-700 text-sm sm:text-base md:text-lg leading-relaxed whitespace-pre-wrap">
-              {question.body}
-            </p>
-          </div>
-
-          {/* Actions with Vote Button */}
-          <div className="p-4 sm:p-6 bg-white border-t border-gray-100">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Edit/Delete Buttons - ONLY SHOW FOR OWNER */}
+          {isOwner && (
+            <div className="flex space-x-2 ml-4">
               <button
-                onClick={() => setShowReplyForm(!showReplyForm)}
-                className="inline-flex items-center justify-center gap-2 bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-semibold hover:bg-blue-700 transition transform hover:scale-105 text-sm sm:text-base"
+                onClick={() => setShowEditModal(true)}
+                className="text-blue-600 hover:text-blue-800 transition p-2 rounded-lg hover:bg-blue-50"
+                title="Edit question"
               >
-                ✏️ {showReplyForm ? "Cancel Reply" : "Write an Answer"}
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
+                </svg>
               </button>
 
-              <VoteButton
-                itemId={question.id}
-                itemType="question"
-                initialVotes={question.votes_count || question.votes || 0}
-                initialUserVote={question.user_vote}
-                onVoteChange={refreshQuestion}
-              />
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="text-red-600 hover:text-red-800 transition p-2 rounded-lg hover:bg-red-50"
+                title="Delete question"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
             </div>
-            {!isAuthenticated && (
-              <p className="text-xs text-gray-400 mt-3">
-                <Link to="/login" className="text-blue-600 hover:underline">
-                  Sign in
-                </Link>{" "}
-                to vote
-              </p>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* Reply Form */}
-        {showReplyForm && (
-          <div className="mt-4 sm:mt-6 bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-            <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">
-              Your Answer
-            </h3>
-            <form onSubmit={submitAnswer}>
-              <textarea
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Write your answer here... Be detailed and helpful!"
-                className="w-full border border-gray-300 rounded-lg p-3 sm:p-4 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm sm:text-base"
-                rows={6}
-              />
-              <div className="flex flex-col sm:flex-row gap-3 mt-4">
+        <p className="text-gray-700 mb-6 whitespace-pre-wrap">
+          {question.body}
+        </p>
+
+        {/* ACTIONS */}
+        <div className="flex items-center justify-between text-sm text-gray-500">
+          <Link to="/all-questions" className="text-blue-600 hover:underline">
+            ← Back to Questions
+          </Link>
+
+          {user ? (
+            <button
+              onClick={() => setShowReplyForm(!showReplyForm)}
+              className="text-blue-600 hover:underline"
+            >
+              {showReplyForm ? "Close Reply" : "Reply"}
+            </button>
+          ) : (
+            <Link to="/login" className="text-blue-600 hover:underline">
+              Login to reply
+            </Link>
+          )}
+        </div>
+
+        <div className="border-t my-6" />
+
+        {/* ANSWERS SECTION */}
+        <h2 className="text-2xl font-semibold mb-4">
+          Answers ({answers.length})
+        </h2>
+
+        {answers.length === 0 ? (
+          <p className="text-gray-500">
+            No answers yet. Be the first to reply!
+          </p>
+        ) : (
+          answers.map((answer) => (
+            <div
+              key={answer.id}
+              className="bg-gray-50 p-4 rounded-lg mb-4 border"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 font-semibold text-sm">
+                      {answer.user?.name?.charAt(0).toUpperCase() || "?"}
+                    </span>
+                  </div>
+                  <span className="font-medium text-gray-700">
+                    {answer.user?.name || "Anonymous User"}
+                  </span>
+                </div>
+                <small className="text-gray-400">
+                  {new Date(answer.created_at).toLocaleDateString()}
+                </small>
+              </div>
+
+              <p className="text-gray-700 mt-2 whitespace-pre-wrap">
+                {answer.body}
+              </p>
+            </div>
+          ))
+        )}
+
+        {/* REPLY FORM */}
+        {showReplyForm && user && (
+          <form onSubmit={submitAnswer} className="mt-6">
+            <textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Write your reply..."
+              className="w-full border p-3 rounded outline-none focus:ring-2 focus:ring-blue-500"
+              rows={4}
+            />
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {submitting ? "Posting..." : "Post Reply"}
+            </button>
+          </form>
+        )}
+      </div>
+
+      {/* EDIT MODAL */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Edit Question</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg
+                  className="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateQuestion}>
+              <div className="mb-4">
+                <label className="block text-gray-700 font-semibold mb-2">
+                  Title
+                </label>
+                <input
+                  type="text"
+                  name="title"
+                  value={editForm.title}
+                  onChange={handleEditChange}
+                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="What's your question?"
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-gray-700 font-semibold mb-2">
+                  Body
+                </label>
+                <textarea
+                  name="body"
+                  value={editForm.body}
+                  onChange={handleEditChange}
+                  rows={8}
+                  className="w-full border border-gray-300 p-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Provide more details about your question..."
+                  required
+                />
+              </div>
+
+              <div className="flex space-x-3">
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="bg-blue-600 text-white px-5 sm:px-6 py-2 sm:py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 text-sm sm:text-base"
+                  disabled={isUpdating}
+                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
                 >
-                  {submitting ? "Posting..." : "Post Answer"}
+                  {isUpdating ? "Updating..." : "Update Question"}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowReplyForm(false)}
-                  className="border border-gray-300 text-gray-700 px-5 sm:px-6 py-2 sm:py-2.5 rounded-lg font-semibold hover:bg-gray-50 transition text-sm sm:text-base"
+                  onClick={() => setShowEditModal(false)}
+                  className="bg-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-400 transition"
                 >
                   Cancel
                 </button>
               </div>
             </form>
           </div>
-        )}
-
-        {/* Answers Section with Pagination */}
-        <div id="answers-section" className="mt-6 sm:mt-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">
-              Answers ({totalAnswers})
-            </h2>
-            {totalAnswers > 0 && (
-              <div className="text-xs sm:text-sm text-gray-500">
-                Showing {startItem} - {endItem} of {totalAnswers} answers
-              </div>
-            )}
-          </div>
-
-          {/* Pagination Loading State */}
-          {paginationLoading && (
-            <div className="flex justify-center py-8">
-              <div className="w-8 h-8 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin"></div>
-            </div>
-          )}
-
-          {!paginationLoading && answers.length === 0 ? (
-            <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-gray-200 p-8 sm:p-12 text-center">
-              <div className="text-5xl sm:text-6xl mb-4">💭</div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">
-                No answers yet
-              </h3>
-              <p className="text-sm sm:text-base text-gray-500 mb-4">
-                Be the first to help!
-              </p>
-            </div>
-          ) : (
-            !paginationLoading && (
-              <>
-                <div className="space-y-4 sm:space-y-6">
-                  {answers.map((answer, index) => (
-                    <div
-                      key={answer.id}
-                      className="bg-white rounded-lg sm:rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-200 overflow-hidden animate-fade-in"
-                      style={{ animationDelay: `${index * 0.1}s` }}
-                    >
-                      {/* Answer Header */}
-                      <div className="p-4 sm:p-6 bg-gray-50 border-b border-gray-100">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                              <span className="text-purple-600 font-semibold text-sm sm:text-base">
-                                {answer.user?.name?.charAt(0).toUpperCase() ||
-                                  "?"}
-                              </span>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-700 text-sm sm:text-base">
-                                {answer.user?.name || "Anonymous User"}
-                              </p>
-                              <p className="text-xs text-gray-400">
-                                Answered {getRelativeDate(answer.created_at)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Answer Body */}
-                      <div className="p-4 sm:p-6">
-                        <p className="text-gray-700 text-sm sm:text-base leading-relaxed whitespace-pre-wrap">
-                          {answer.body}
-                        </p>
-                      </div>
-
-                      {/* Answer Actions with Vote Button */}
-                      <div className="px-4 sm:px-6 pb-4 sm:pb-6 flex items-center justify-between">
-                        <VoteButton
-                          itemId={answer.id}
-                          itemType="answer"
-                          initialVotes={answer.votes_count || answer.votes || 0}
-                          initialUserVote={answer.user_vote}
-                          onVoteChange={refreshAnswers}
-                        />
-                      </div>
-                      {!isAuthenticated && (
-                        <div className="px-4 sm:px-6 pb-4">
-                          <p className="text-xs text-gray-400">
-                            <Link
-                              to="/login"
-                              className="text-blue-600 hover:underline"
-                            >
-                              Sign in
-                            </Link>{" "}
-                            to vote
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Pagination Controls */}
-                {lastPage > 1 && (
-                  <div className="mt-8">
-                    <div className="flex justify-center items-center gap-2 flex-wrap">
-                      {/* First Page Button */}
-                      <button
-                        onClick={() => handlePageChange(1)}
-                        disabled={currentPage === 1}
-                        className={`px-3 py-2 rounded-lg transition ${
-                          currentPage === 1
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        }`}
-                      >
-                        ⟪ First
-                      </button>
-
-                      {/* Previous Button */}
-                      <button
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className={`px-3 py-2 rounded-lg transition ${
-                          currentPage === 1
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        }`}
-                      >
-                        ← Previous
-                      </button>
-
-                      {/* Page Numbers */}
-                      <div className="flex gap-1">
-                        {getPageNumbers().map((page) => (
-                          <button
-                            key={page}
-                            onClick={() => handlePageChange(page)}
-                            className={`px-3 py-2 rounded-lg transition min-w-[40px] ${
-                              currentPage === page
-                                ? "bg-blue-600 text-white"
-                                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                            }`}
-                          >
-                            {page}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Next Button */}
-                      <button
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === lastPage}
-                        className={`px-3 py-2 rounded-lg transition ${
-                          currentPage === lastPage
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        }`}
-                      >
-                        Next →
-                      </button>
-
-                      {/* Last Page Button */}
-                      <button
-                        onClick={() => handlePageChange(lastPage)}
-                        disabled={currentPage === lastPage}
-                        className={`px-3 py-2 rounded-lg transition ${
-                          currentPage === lastPage
-                            ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                            : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                        }`}
-                      >
-                        Last ⟫
-                      </button>
-                    </div>
-
-                    {/* Page Info */}
-                    <div className="text-center mt-4 text-sm text-gray-500">
-                      Page {currentPage} of {lastPage}
-                    </div>
-                  </div>
-                )}
-              </>
-            )
-          )}
         </div>
-      </div>
+      )}
 
-      <style jsx>{`
-        @keyframes fade-in {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fade-in {
-          animation: fade-in 0.5s ease-out;
-        }
-      `}</style>
+      {/* DELETE CONFIRMATION MODAL */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <svg
+                  className="h-6 w-6 text-red-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Delete Question
+              </h3>
+
+              <p className="text-gray-500 mb-4">
+                Are you sure you want to delete this question? This action
+                cannot be undone.
+              </p>
+
+              <p className="text-sm text-gray-400 mb-6">
+                "{question.title.substring(0, 100)}"
+              </p>
+
+              <div className="flex space-x-3">
+                <button
+                  onClick={handleDeleteQuestion}
+                  disabled={isDeleting}
+                  className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+                >
+                  {isDeleting ? "Deleting..." : "Delete"}
+                </button>
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
