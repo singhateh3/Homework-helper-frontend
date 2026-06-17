@@ -11,16 +11,6 @@ const AcceptAnswerButton = ({ answer, question, onAcceptChange }) => {
   const isOwner = user && question && user.id === question.user_id;
   const isAccepted = answer.is_accepted;
 
-  // Debug logging - remove after testing
-  console.log("AcceptAnswerButton Debug:", {
-    user,
-    userId: user?.id,
-    questionUserId: question?.user_id,
-    isOwner,
-    isAccepted,
-    answerId: answer?.id,
-  });
-
   const handleAccept = async () => {
     setIsLoading(true);
     setError(null);
