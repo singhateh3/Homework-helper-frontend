@@ -1,60 +1,92 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import api from "../services/api";
 import { Link } from "react-router-dom";
 import QuestionCard from "../components/QuestionCard";
+import { AllQuestionsSkeleton } from "../components/Skeletons";
 
 const AllQuestions = () => {
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [lastPage, setLastPage] = useState(1);
-  const [totalQuestions, setTotalQuestions] = useState(0);
-  const [perPage, setPerPage] = useState(15);
-  const [paginationLoading, setPaginationLoading] = useState(false);
+  // State
+  const [state, setState] = useState({
+    questions: [],
+    loading: false,
+    error: null,
+    currentPage: 1,
+    lastPage: 1,
+    totalQuestions: 0,
+    perPage: 15,
+    paginationLoading: false,
+  });
 
-  const fetchQuestions = async (page = 1, isPageChange = false) => {
-    if (isPageChange) {
-      setPaginationLoading(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
+  const {
+    questions,
+    loading,
+    error,
+    currentPage,
+    lastPage,
+    totalQuestions,
+    perPage,
+    paginationLoading,
+  } = state;
 
-    try {
-      const response = await api.get(`/questions?page=${page}`);
-      console.log("Questions response:", response.data);
+  // Update state helper
+  const updateState = useCallback((updates) => {
+    setState((prev) => ({ ...prev, ...updates }));
+  }, []);
 
-      // Match your backend response structure
-      setQuestions(response.data.data || []);
-      setCurrentPage(response.data.current_page || 1);
-      setLastPage(response.data.last_page || 1);
-      setPerPage(response.data.per_page || 15);
-      setTotalQuestions(response.data.total || 0);
-    } catch (error) {
-      console.error("Error fetching questions:", error);
-      setError(error.response?.data?.message || "Failed to fetch questions");
-    } finally {
-      if (isPageChange) {
-        setPaginationLoading(false);
-      } else {
-        setLoading(false);
+  // Fetch questions
+  const fetchQuestions = useCallback(
+    async (page = 1, isPageChange = false) => {
+      updateState({
+        loading: !isPageChange,
+        paginationLoading: isPageChange,
+        error: null,
+      });
+
+      try {
+        const response = await api.get(`/questions`, {
+          params: { page, per_page: 15 },
+        });
+
+        const { data, current_page, last_page, per_page, total } =
+          response.data;
+
+        updateState({
+          questions: data || [],
+          currentPage: current_page || 1,
+          lastPage: last_page || 1,
+          perPage: per_page || 15,
+          totalQuestions: total || 0,
+        });
+      } catch (error) {
+        console.error("Error fetching questions:", error);
+        updateState({
+          error: error.response?.data?.message || "Failed to fetch questions",
+        });
+      } finally {
+        updateState({
+          loading: false,
+          paginationLoading: false,
+        });
       }
-    }
-  };
+    },
+    [updateState],
+  );
 
+  // Initial fetch
   useEffect(() => {
-    fetchQuestions(currentPage);
-  }, [currentPage]);
+    fetchQuestions(1);
+  }, [fetchQuestions]);
 
+  // Handle page change
   const handlePageChange = (newPage) => {
     if (newPage >= 1 && newPage <= lastPage && newPage !== currentPage) {
-      setCurrentPage(newPage);
+      fetchQuestions(newPage, true);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
-  const getPageNumbers = () => {
+  // Generate page numbers
+  const getPageNumbers = useCallback(() => {
     const pages = [];
     const maxVisible = 5;
     let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
@@ -69,22 +101,15 @@ const AllQuestions = () => {
     }
 
     return pages;
-  };
+  }, [currentPage, lastPage]);
 
   // Calculate showing range
   const startItem = (currentPage - 1) * perPage + 1;
   const endItem = Math.min(currentPage * perPage, totalQuestions);
 
-  // Loading State
+  // Loading State with Skeleton
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin mb-4"></div>
-        <p className="text-sm sm:text-base text-gray-500">
-          Loading questions...
-        </p>
-      </div>
-    );
+    return <AllQuestionsSkeleton />;
   }
 
   // Error State
@@ -106,7 +131,7 @@ const AllQuestions = () => {
   }
 
   // No Questions State
-  if (questions.length === 0 && !loading) {
+  if (questions.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-10 px-4">
         <div className="max-w-6xl mx-auto">
@@ -139,6 +164,40 @@ const AllQuestions = () => {
     );
   }
 
+  // Pagination Button Component
+  const PaginationButton = ({
+    onClick,
+    disabled,
+    children,
+    className = "",
+  }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`px-3 py-2 rounded-lg transition text-sm ${
+        disabled
+          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+      } ${className}`}
+    >
+      {children}
+    </button>
+  );
+
+  // Page Number Button
+  const PageButton = ({ page, isActive }) => (
+    <button
+      onClick={() => handlePageChange(page)}
+      className={`px-3 py-2 rounded-lg transition min-w-[40px] text-sm ${
+        isActive
+          ? "bg-blue-600 text-white"
+          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+      }`}
+    >
+      {page}
+    </button>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-10 px-4">
       <div className="max-w-6xl mx-auto">
@@ -152,7 +211,7 @@ const AllQuestions = () => {
           </div>
           <Link
             to="/ask-question"
-            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+            className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-sm sm:text-base"
           >
             ✏️ Ask Question
           </Link>
@@ -179,77 +238,45 @@ const AllQuestions = () => {
         {lastPage > 1 && (
           <div className="mt-8">
             <div className="flex justify-center items-center gap-2 flex-wrap">
-              {/* First Page Button */}
-              <button
+              <PaginationButton
                 onClick={() => handlePageChange(1)}
                 disabled={currentPage === 1}
-                className={`px-3 py-2 rounded-lg transition ${
-                  currentPage === 1
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }`}
               >
                 ⟪ First
-              </button>
+              </PaginationButton>
 
-              {/* Previous Button */}
-              <button
+              <PaginationButton
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
-                className={`px-3 py-2 rounded-lg transition ${
-                  currentPage === 1
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }`}
               >
                 ← Previous
-              </button>
+              </PaginationButton>
 
-              {/* Page Numbers */}
               <div className="flex gap-1">
                 {getPageNumbers().map((page) => (
-                  <button
+                  <PageButton
                     key={page}
-                    onClick={() => handlePageChange(page)}
-                    className={`px-3 py-2 rounded-lg transition min-w-[40px] ${
-                      currentPage === page
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                    }`}
-                  >
-                    {page}
-                  </button>
+                    page={page}
+                    isActive={currentPage === page}
+                  />
                 ))}
               </div>
 
-              {/* Next Button */}
-              <button
+              <PaginationButton
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === lastPage}
-                className={`px-3 py-2 rounded-lg transition ${
-                  currentPage === lastPage
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }`}
               >
                 Next →
-              </button>
+              </PaginationButton>
 
-              {/* Last Page Button */}
-              <button
+              <PaginationButton
                 onClick={() => handlePageChange(lastPage)}
                 disabled={currentPage === lastPage}
-                className={`px-3 py-2 rounded-lg transition ${
-                  currentPage === lastPage
-                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                }`}
               >
                 Last ⟫
-              </button>
+              </PaginationButton>
             </div>
 
-            {/* Page Info */}
             <div className="text-center mt-4 text-sm text-gray-500">
               Page {currentPage} of {lastPage}
             </div>

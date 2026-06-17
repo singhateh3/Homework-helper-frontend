@@ -1,69 +1,123 @@
-import { useEffect, useState } from "react";
+// src/pages/Home.jsx
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import api from "../services/api";
 import QuestionCard from "../components/QuestionCard";
+import {
+  StatsSkeleton,
+  QuestionCardSkeletonList,
+} from "../components/Skeletons";
+
+// Constants
+const TOPICS = [
+  "Mathematics",
+  "Physics",
+  "Programming",
+  "Chemistry",
+  "Biology",
+  "History",
+  "Literature",
+  "Economics",
+];
+
+const INITIAL_STATS = {
+  total_questions: 0,
+  total_answers: 0,
+  total_users: 0,
+  today_questions: 0,
+  today_answers: 0,
+  most_active_user: null,
+};
 
 function Home() {
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
-    total_questions: 0,
-    total_answers: 0,
-    total_users: 0,
-    today_questions: 0,
-    today_answers: 0,
-    most_active_user: null,
+  // State
+  const [state, setState] = useState({
+    questions: [],
+    loading: false,
+    error: null,
+    stats: INITIAL_STATS,
   });
 
-  const fetchQuestions = async () => {
-    setLoading(true);
-    setError(null);
+  const { questions, loading, error, stats } = state;
+
+  // Update state helper
+  const updateState = useCallback((updates) => {
+    setState((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  // Fetch questions
+  const fetchQuestions = useCallback(async () => {
+    updateState({ loading: true, error: null });
 
     try {
       const response = await api.get("/top-questions");
-      setQuestions(response.data.data || []);
-      console.log(response.data.data);
+      updateState({ questions: response.data.data || [] });
     } catch (error) {
-      console.error(error);
-      setError("Failed to fetch questions");
+      console.error("Failed to fetch questions:", error);
+      updateState({ error: "Failed to fetch questions" });
     } finally {
-      setLoading(false);
+      updateState({ loading: false });
     }
-  };
+  }, [updateState]);
 
-  const fetchStats = async () => {
+  // Fetch stats
+  const fetchStats = useCallback(async () => {
     try {
       const response = await api.get("/stats");
-      console.log("Stats response:", response.data);
-
       if (response.data.success && response.data.data) {
-        setStats(response.data.data);
+        updateState({ stats: response.data.data });
       }
     } catch (error) {
       console.error("Failed to fetch stats:", error);
     }
-  };
+  }, [updateState]);
 
-  // Update only the specific question that was voted on
-  const updateQuestionVote = (questionId, newVotesCount, newUserVote) => {
-    setQuestions((prevQuestions) =>
-      prevQuestions.map((q) =>
-        q.id === questionId
-          ? { ...q, votes_count: newVotesCount, user_vote: newUserVote }
-          : q,
-      ),
-    );
-  };
+  // Update question vote
+  const updateQuestionVote = useCallback(
+    (questionId, newVotesCount, newUserVote) => {
+      setState((prev) => ({
+        ...prev,
+        questions: prev.questions.map((q) =>
+          q.id === questionId
+            ? { ...q, votes_count: newVotesCount, user_vote: newUserVote }
+            : q,
+        ),
+      }));
+    },
+    [],
+  );
 
+  // Initial fetch
   useEffect(() => {
     fetchQuestions();
     fetchStats();
-  }, []);
+  }, [fetchQuestions, fetchStats]);
+
+  // Stats Card Component
+  const StatsCard = ({ icon, value, label, todayValue }) => (
+    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4 transform hover:scale-105 transition">
+      <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">{icon}</div>
+      <div className="text-xl sm:text-2xl font-bold">{value}</div>
+      <div className="text-xs sm:text-sm opacity-75">{label}</div>
+      {todayValue > 0 && (
+        <div className="text-xs opacity-75 mt-1">+{todayValue} today</div>
+      )}
+    </div>
+  );
+
+  // Topic Button Component
+  const TopicButton = ({ topic }) => (
+    <Link
+      to={`/search?category=${topic.toLowerCase()}`}
+      className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white rounded-full text-xs sm:text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition border border-gray-200 whitespace-nowrap"
+    >
+      {topic}
+    </Link>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* HERO SECTION - Fully Responsive */}
+      {/* HERO SECTION */}
       <section className="relative overflow-hidden bg-gradient-to-r from-blue-600 to-blue-800 text-white">
         <div className="absolute inset-0 bg-black opacity-20"></div>
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-400 rounded-full opacity-20 blur-3xl"></div>
@@ -78,47 +132,34 @@ function Home() {
             worldwide
           </p>
 
-          {/* Stats Bar - Real data from backend */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-4xl mx-auto mb-8 sm:mb-12 px-4">
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4 transform hover:scale-105 transition">
-              <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">❓</div>
-              <div className="text-xl sm:text-2xl font-bold">
-                {stats.total_questions}
-              </div>
-              <div className="text-xs sm:text-sm opacity-75">
-                Questions Asked
-              </div>
-              {stats.today_questions > 0 && (
-                <div className="text-xs opacity-75 mt-1">
-                  +{stats.today_questions} today
-                </div>
-              )}
+          {/* Stats Bar with Skeleton */}
+          {loading ? (
+            <StatsSkeleton />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-4xl mx-auto mb-8 sm:mb-12 px-4">
+              <StatsCard
+                icon="❓"
+                value={stats.total_questions}
+                label="Questions Asked"
+                todayValue={stats.today_questions}
+              />
+              <StatsCard
+                icon="💬"
+                value={stats.total_answers}
+                label="Answers Given"
+                todayValue={stats.today_answers}
+              />
+              <StatsCard
+                icon="👥"
+                value={stats.total_users}
+                label="Community Members"
+                todayValue={0}
+              />
             </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4 transform hover:scale-105 transition">
-              <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">💬</div>
-              <div className="text-xl sm:text-2xl font-bold">
-                {stats.total_answers}
-              </div>
-              <div className="text-xs sm:text-sm opacity-75">Answers Given</div>
-              {stats.today_answers > 0 && (
-                <div className="text-xs opacity-75 mt-1">
-                  +{stats.today_answers} today
-                </div>
-              )}
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 sm:p-4 transform hover:scale-105 transition">
-              <div className="text-2xl sm:text-3xl mb-1 sm:mb-2">👥</div>
-              <div className="text-xl sm:text-2xl font-bold">
-                {stats.total_users}
-              </div>
-              <div className="text-xs sm:text-sm opacity-75">
-                Community Members
-              </div>
-            </div>
-          </div>
+          )}
 
-          {/* Most Active User (if exists) */}
-          {stats.most_active_user && (
+          {/* Most Active User */}
+          {!loading && stats.most_active_user && (
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3 max-w-sm mx-auto mb-8">
               <div className="text-xs opacity-75 mb-1">
                 🏆 Most Active Member
@@ -130,6 +171,7 @@ function Home() {
             </div>
           )}
 
+          {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4 px-4">
             <Link
               to="/ask-question"
@@ -147,7 +189,7 @@ function Home() {
         </div>
       </section>
 
-      {/* TRENDING TOPICS - Horizontal Scroll on Mobile */}
+      {/* TRENDING TOPICS */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="flex items-center gap-2 text-gray-600 mb-3">
           <span className="text-base sm:text-lg">📈</span>
@@ -156,23 +198,8 @@ function Home() {
           </span>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
-          {[
-            "Mathematics",
-            "Physics",
-            "Programming",
-            "Chemistry",
-            "Biology",
-            "History",
-            "Literature",
-            "Economics",
-          ].map((topic) => (
-            <Link
-              key={topic}
-              to={`/questions?topic=${topic.toLowerCase()}`}
-              className="px-3 sm:px-4 py-1.5 sm:py-2 bg-white rounded-full text-xs sm:text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition border border-gray-200 whitespace-nowrap"
-            >
-              {topic}
-            </Link>
+          {TOPICS.map((topic) => (
+            <TopicButton key={topic} topic={topic} />
           ))}
         </div>
       </section>
@@ -192,20 +219,9 @@ function Home() {
             to="/all-questions"
             className="text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 text-sm sm:text-base"
           >
-            View all
-            <span>→</span>
+            View all <span>→</span>
           </Link>
         </div>
-
-        {/* Loading State */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-12 sm:py-16">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin mb-4"></div>
-            <p className="text-sm sm:text-base text-gray-500">
-              Loading questions...
-            </p>
-          </div>
-        )}
 
         {/* Error State */}
         {error && !loading && (
@@ -221,10 +237,12 @@ function Home() {
           </div>
         )}
 
-        {/* Questions Display */}
-        {!loading && !error && (
+        {/* Questions Display with Skeleton */}
+        {!error && (
           <>
-            {questions.length === 0 ? (
+            {loading ? (
+              <QuestionCardSkeletonList count={3} />
+            ) : questions.length === 0 ? (
               <div className="bg-white rounded-lg p-8 sm:p-12 text-center border border-gray-200">
                 <div className="text-5xl sm:text-6xl mb-4">📚</div>
                 <h3 className="text-lg sm:text-xl font-semibold text-gray-700 mb-2">
@@ -255,7 +273,7 @@ function Home() {
         )}
       </section>
 
-      {/* CTA SECTION - Responsive */}
+      {/* CTA SECTION */}
       <section className="bg-gradient-to-r from-purple-600 to-blue-600 text-white mt-8 sm:mt-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 text-center">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4 px-4">

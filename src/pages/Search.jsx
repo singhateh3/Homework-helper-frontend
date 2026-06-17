@@ -1,7 +1,32 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import api from "../services/api";
 import QuestionCard from "../components/QuestionCard";
+import {
+  SearchSkeleton,
+  QuestionCardSkeletonList,
+} from "../components/Skeletons";
+
+// Categories/Topics for filter
+const categories = [
+  { value: "", label: "All Topics" },
+  { value: "mathematics", label: "Mathematics" },
+  { value: "physics", label: "Physics" },
+  { value: "programming", label: "Programming" },
+  { value: "chemistry", label: "Chemistry" },
+  { value: "biology", label: "Biology" },
+  { value: "history", label: "History" },
+  { value: "literature", label: "Literature" },
+  { value: "economics", label: "Economics" },
+];
+
+const sortOptions = [
+  { value: "relevance", label: "Relevance" },
+  { value: "created_at", label: "Latest" },
+  { value: "answers_count", label: "Most Answers" },
+  { value: "title", label: "Title A-Z" },
+  { value: "views", label: "Most Viewed" },
+];
 
 function Search() {
   const navigate = useNavigate();
@@ -14,82 +39,84 @@ function Search() {
   const initialSortBy = queryParams.get("sort_by") || "relevance";
   const initialSortOrder = queryParams.get("sort_order") || "desc";
 
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState(initialQuery);
-  const [filters, setFilters] = useState({
-    category: initialCategory,
-    sort_by: initialSortBy,
-    sort_order: initialSortOrder,
+  const [state, setState] = useState({
+    questions: [],
+    loading: false,
+    error: null,
+    searchTerm: initialQuery,
+    filters: {
+      category: initialCategory,
+      sort_by: initialSortBy,
+      sort_order: initialSortOrder,
+    },
+    pagination: {
+      current_page: 1,
+      last_page: 1,
+      per_page: 15,
+      total: 0,
+    },
+    searchMeta: null,
   });
-  const [pagination, setPagination] = useState({
-    current_page: 1,
-    last_page: 1,
-    per_page: 15,
-    total: 0,
-  });
-  const [searchMeta, setSearchMeta] = useState(null);
 
-  // Categories/Topics for filter
-  const categories = [
-    { value: "", label: "All Topics" },
-    { value: "mathematics", label: "Mathematics" },
-    { value: "physics", label: "Physics" },
-    { value: "programming", label: "Programming" },
-    { value: "chemistry", label: "Chemistry" },
-    { value: "biology", label: "Biology" },
-    { value: "history", label: "History" },
-    { value: "literature", label: "Literature" },
-    { value: "economics", label: "Economics" },
-  ];
+  const {
+    questions,
+    loading,
+    error,
+    searchTerm,
+    filters,
+    pagination,
+    searchMeta,
+  } = state;
 
-  const sortOptions = [
-    { value: "relevance", label: "Relevance" },
-    { value: "created_at", label: "Latest" },
-    { value: "answers_count", label: "Most Answers" },
-    { value: "title", label: "Title A-Z" },
-    { value: "views", label: "Most Viewed" },
-  ];
+  // Update state helper
+  const updateState = useCallback((updates) => {
+    setState((prev) => ({ ...prev, ...updates }));
+  }, []);
 
-  const performSearch = async (page = 1) => {
-    setLoading(true);
-    setError(null);
+  const performSearch = useCallback(
+    async (page = 1) => {
+      updateState({ loading: true, error: null });
 
-    try {
-      const params = new URLSearchParams({
-        q: searchTerm,
-        page: page,
-        per_page: pagination.per_page,
-        ...(filters.category && { category: filters.category }),
-        ...(filters.sort_by !== "relevance" && { sort_by: filters.sort_by }),
-        ...(filters.sort_by !== "relevance" && {
-          sort_order: filters.sort_order,
-        }),
-      });
-
-      // Update URL
-      navigate(`/search?${params.toString()}`, { replace: true });
-
-      const response = await api.get(`/questions/search?${params.toString()}`);
-
-      if (response.data.success) {
-        setQuestions(response.data.data || []);
-        setPagination({
-          current_page: response.data.current_page || 1,
-          last_page: response.data.last_page || 1,
-          per_page: response.data.per_page || 15,
-          total: response.data.total || 0,
+      try {
+        const params = new URLSearchParams({
+          q: searchTerm,
+          page: page,
+          per_page: pagination.per_page,
+          ...(filters.category && { category: filters.category }),
+          ...(filters.sort_by !== "relevance" && { sort_by: filters.sort_by }),
+          ...(filters.sort_by !== "relevance" && {
+            sort_order: filters.sort_order,
+          }),
         });
-        setSearchMeta(response.data.search_meta || null);
+
+        // Update URL
+        navigate(`/search?${params.toString()}`, { replace: true });
+
+        const response = await api.get(
+          `/questions/search?${params.toString()}`,
+        );
+
+        if (response.data.success) {
+          updateState({
+            questions: response.data.data || [],
+            pagination: {
+              current_page: response.data.current_page || 1,
+              last_page: response.data.last_page || 1,
+              per_page: response.data.per_page || 15,
+              total: response.data.total || 0,
+            },
+            searchMeta: response.data.search_meta || null,
+          });
+        }
+      } catch (error) {
+        console.error("Search error:", error);
+        updateState({ error: "Failed to search questions. Please try again." });
+      } finally {
+        updateState({ loading: false });
       }
-    } catch (error) {
-      console.error("Search error:", error);
-      setError("Failed to search questions. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [searchTerm, filters, pagination.per_page, navigate, updateState],
+  );
 
   // Handle search form submission
   const handleSearch = (e) => {
@@ -99,7 +126,9 @@ function Search() {
 
   // Handle filter changes
   const handleFilterChange = (key, value) => {
-    setFilters((prev) => ({ ...prev, [key]: value }));
+    updateState({
+      filters: { ...filters, [key]: value },
+    });
   };
 
   // Apply filters
@@ -109,27 +138,33 @@ function Search() {
 
   // Reset all filters
   const resetFilters = () => {
-    setSearchTerm("");
-    setFilters({
-      category: "",
-      sort_by: "relevance",
-      sort_order: "desc",
+    updateState({
+      searchTerm: "",
+      filters: {
+        category: "",
+        sort_by: "relevance",
+        sort_order: "desc",
+      },
+      questions: [],
+      searchMeta: null,
     });
     navigate("/search", { replace: true });
-    setQuestions([]);
-    setSearchMeta(null);
   };
 
   // Update only the specific question that was voted on
-  const updateQuestionVote = (questionId, newVotesCount, newUserVote) => {
-    setQuestions((prevQuestions) =>
-      prevQuestions.map((q) =>
-        q.id === questionId
-          ? { ...q, votes_count: newVotesCount, user_vote: newUserVote }
-          : q,
-      ),
-    );
-  };
+  const updateQuestionVote = useCallback(
+    (questionId, newVotesCount, newUserVote) => {
+      setState((prev) => ({
+        ...prev,
+        questions: prev.questions.map((q) =>
+          q.id === questionId
+            ? { ...q, votes_count: newVotesCount, user_vote: newUserVote }
+            : q,
+        ),
+      }));
+    },
+    [],
+  );
 
   // Initial search on component mount or URL change
   useEffect(() => {
@@ -137,6 +172,11 @@ function Search() {
       performSearch(1);
     }
   }, []);
+
+  // Loading State with Skeleton
+  if (loading) {
+    return <SearchSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -168,14 +208,14 @@ function Search() {
               <input
                 type="text"
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => updateState({ searchTerm: e.target.value })}
                 placeholder="Search by title or content..."
-                className="w-full px-4 py-3 rounded-lg text-white-800 ring-1 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm sm:text-base"
+                className="w-full px-4 py-3 rounded-lg text-shadow-white ring-1 ring-gray-300 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-white/50 text-sm sm:text-base"
               />
               {searchTerm && (
                 <button
                   type="button"
-                  onClick={() => setSearchTerm("")}
+                  onClick={() => updateState({ searchTerm: "" })}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   ✕
@@ -277,7 +317,7 @@ function Search() {
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
                   Search: "{searchTerm}"
                   <button
-                    onClick={() => setSearchTerm("")}
+                    onClick={() => updateState({ searchTerm: "" })}
                     className="ml-1 hover:text-blue-900"
                   >
                     ✕
@@ -338,16 +378,6 @@ function Search() {
           )}
         </div>
 
-        {/* Loading State */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-12 sm:py-16">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-4 border-blue-200 border-t-blue-600 animate-spin mb-4"></div>
-            <p className="text-sm sm:text-base text-gray-500">
-              Searching questions...
-            </p>
-          </div>
-        )}
-
         {/* Error State */}
         {error && !loading && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 sm:p-8 text-center">
@@ -363,7 +393,7 @@ function Search() {
         )}
 
         {/* Results Display */}
-        {!loading && !error && (
+        {!error && (
           <>
             {questions.length === 0 && searchTerm && !loading && (
               <div className="bg-white rounded-lg p-8 sm:p-12 text-center border border-gray-200">
@@ -420,7 +450,6 @@ function Search() {
 
                     {[...Array(pagination.last_page)].map((_, index) => {
                       const pageNum = index + 1;
-                      // Show limited page numbers with ellipsis
                       if (
                         pageNum === 1 ||
                         pageNum === pagination.last_page ||
