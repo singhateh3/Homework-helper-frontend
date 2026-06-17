@@ -138,7 +138,7 @@ function Home() {
               ✏️ Ask a Question
             </Link>
             <Link
-              to="/all-questions"
+              to="/search"
               className="inline-flex items-center justify-center gap-2 border-2 border-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold hover:bg-white hover:text-blue-600 transition transform hover:scale-105 text-sm sm:text-base"
             >
               🔍 Browse Questions

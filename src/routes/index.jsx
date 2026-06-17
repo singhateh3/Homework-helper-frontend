@@ -6,6 +6,7 @@ import NotFoundPage from "../pages/NotFoundPage.jsx";
 import CreateQuestion from "../pages/CreateQuestion.jsx";
 import AllQuestions from "../pages/AllQuestions.jsx";
 import QuestionDetails from "../pages/QuestionDetails.jsx";
+import Search from "../pages/Search.jsx"; // Import Search component
 import ProtectedRoute from "../components/ProtectedRoute";
 import Layout from "../components/Layout";
 
@@ -19,6 +20,7 @@ const router = createBrowserRouter([
     path: "/register",
     element: <Register />,
   },
+
   // Protected routes with Layout
   {
     element: <Layout />,
@@ -52,6 +54,15 @@ const router = createBrowserRouter([
         element: (
           <ProtectedRoute>
             <QuestionDetails />
+          </ProtectedRoute>
+        ),
+      },
+      // Add Search route
+      {
+        path: "/search",
+        element: (
+          <ProtectedRoute>
+            <Search />
           </ProtectedRoute>
         ),
       },
